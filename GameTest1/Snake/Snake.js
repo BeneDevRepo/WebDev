@@ -7,12 +7,10 @@ let canvas;
 let ctx;
 
 let Direction = Object.freeze({
-// let Direction = {
 	left: "Left",
 	right: "Right",
 	up: "Up",
 	down: "Down",
-// };
 });
 
 
@@ -23,7 +21,34 @@ let game = {
 		{ x: 4, y: 5, },
 		{ x: 5, y: 5, }, // head (last element)
 	],
+	food: [],
 	dir: Direction.right,
+
+	addFood: function() {
+		let newFood;
+
+		let done = false;
+
+		while(!done) {
+			newFood = {
+				x: Math.floor(Math.random() * this.width),
+				y: Math.floor(Math.random() * this.height),
+			};
+
+			let overlap = false;
+			for(const seg of this.snake) {
+				if(seg.x == newFood.x && seg.y == newFood.y) {
+					overlap = true;
+					break;
+				}
+			}
+
+			if(!overlap)
+				done = true;
+		}
+
+		this.food.push(newFood);
+	}
 };
 
 
@@ -33,6 +58,8 @@ window.onload = function onload() {
 	
 	document.onkeydown = keyDown;
 	document.onkeyup = keyUp;
+
+	game.addFood();
 
 	// const host = "ws://" + window.location.host + ":88/GameTest1/Pong/server.php"; 
 	// let socket = new WebSocket(host);
@@ -89,8 +116,22 @@ function moveSnake() {
 			break;
 	}
 
+	let foodInd = -1;
+
+	game.food.forEach((food, index) => {
+		if(food.x == newHead.x && food.y == newHead.y)
+			foodInd = index;
+	});
+
+
 	game.snake.push(newHead);
-	game.snake.shift();
+
+	if(foodInd == -1) {
+		game.snake.shift();
+	} else {
+		game.food.splice(foodInd, 1); // remove food
+		game.addFood(); // add new food
+	}
 }
 
 let prevTime = performance.now();
@@ -121,6 +162,15 @@ function loop() {
 	// }
 		
 		
+	ctx.fillStyle = "green";
+	for(const food of game.food)
+		ctx.fillRect(
+			food.x * canvas.width / game.width,
+			food.y * canvas.height / game.height,
+			canvas.width / game.width,
+			canvas.height / game.height);
+
+
 	ctx.fillStyle = "blue";
 	for(const segment of game.snake)
 		ctx.fillRect(
