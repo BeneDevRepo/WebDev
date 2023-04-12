@@ -1,0 +1,79 @@
+:root {
+	/* astley: */
+	background-color: white;
+	background-image: url("https://i.ds.at/MxdaKg/rs:fill:750:0/plain/2021/07/29/572c4830-721d-11eb-bb63-96959c3b62f2.jpg");
+	background-repeat: no-repeat;
+	background-position-x: center;
+	background-position-y: top;
+	background-size: cover;
+	background-attachment: fixed; /* image does not move when scrolling */
+	background-blend-mode: difference;
+}
+
+
+body {
+	font-family: arial, helvetica, sans-serif;
+	font-size: 14px;
+	color: black;
+	/* margin: 20px; */
+
+	margin: 0px;
+	padding: 0;
+	width: 100dvw;
+	height: 100dvh;
+
+	display: grid;
+	grid-template-columns: minmax(300px, 2fr) 1fr;
+	grid-template-rows: 50px repeat(2, 1fr) 100px;
+	grid-template-areas:
+		"header  header"
+		"content right"
+		"content right"
+		"footer  footer";
+	grid-gap: 10px;
+}
+
+
+
+header {
+	grid-area: header;
+
+	margin: 0;
+	
+	background-color: #900;
+	border-bottom: .5em solid #c00;
+}
+
+header h1 {
+	margin: 0;
+	margin-bottom: 7px;
+	padding: 4px;
+
+	color: #ffc;
+	font-size: 2em;
+	font-style: italic;
+	text-align: center;
+	letter-spacing: 0.5em;
+}
+
+
+
+.links {
+	display: flex;
+	flex-direction: column;
+	grid-area: content;
+	padding: 10px;
+	background-color: rgba(46, 46, 46, 0.89);
+	border-top-right-radius: 1em;
+	border-bottom-right-radius: 1em;
+}
+
+.links a {
+	background-color: rgb(192, 230, 192);
+	border-radius: 5px;
+	margin: 10px;
+	/* margin-top: 10px; */
+	padding: 10px;
+	color: rgb(67, 96, 134);
+	text-decoration: none;
+}

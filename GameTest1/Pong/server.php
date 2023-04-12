@@ -4,6 +4,8 @@ include "WebSocket.php";
 
 
 class Client {
+	public $websocket = null;
+
 	public function __construct($websocket) {
 		$this->websocket = $websocket;
 	}

@@ -1,0 +1,46 @@
+body {
+	background-color: #2596be;
+
+	margin: 0px;
+	padding: 0;
+	width: 100dvw;
+	height: 100dvh;
+
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	grid-template-rows: 50px repeat(2, 1fr) 100px;
+	grid-template-areas:
+		"header header  header"
+		"left   content right"
+		"left   content right"
+		"footer footer  footer";
+	grid-gap: 10px;
+}
+
+h1 {
+	grid-area: header;
+
+	width: 100%;
+	display: flex;
+	justify-content: center;
+	margin-top: 10;
+}
+
+#game {
+	grid-area: content;
+}
+
+#fps {
+	position: fixed;
+	padding: 5px;
+
+	color: rgb(79, 207, 79);
+	font-size: 1.2em;
+	letter-spacing: .05em;
+}
+
+/* canvas {
+	display: flex;
+	margin-left: auto;
+	margin-right: auto;
+} */

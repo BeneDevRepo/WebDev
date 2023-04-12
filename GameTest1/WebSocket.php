@@ -1,6 +1,10 @@
 <?php
 
 class Server {
+	public $address = null;
+	public $port = null;
+	public $server = null;
+
 	public function __construct($address, $port) {
 		$this->address = $address;
 		$this->port = $port;
@@ -17,17 +21,15 @@ class Server {
 }
 
 class WebSocket {
+	public $socket = null;
+
 	public function __construct($socket) {
 		$this->socket = $socket;
 
-		
 		// Send WebSocket handshake headers.
 		$request = socket_read($this->socket, 5000);
 		preg_match('#Sec-WebSocket-Key: (.*)\r\n#', $request, $matches);
-		$key = base64_encode(pack(
-			'H*',
-				sha1($matches[1] . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
-			));
+		$key = base64_encode(pack('H*', sha1($matches[1] . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')));
 		$headers = "HTTP/1.1 101 Switching Protocols\r\n";
 		$headers .= "Upgrade: websocket\r\n";
 		$headers .= "Connection: Upgrade\r\n";
@@ -72,5 +74,3 @@ class WebSocket {
 		return json_decode($result);
 	}
 };
-
-?>
