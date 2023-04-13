@@ -9,7 +9,7 @@
 <head>
 	
 	<style>
-	table, th, td {
+	table, td, th {
 		border: 1px solid black;
 		border-spacing: 0px;
 	}
@@ -19,14 +19,30 @@
 	.Vorlesung {
 		background-color: rgb(234, 234, 121);
 	}
+	/* .Vorlesung div.Time {
+		background-color: rgb(211, 211, 69);
+	} */
 	.Praktikum {
 		background-color: rgb(82, 134, 160);
 	}
+	/* .Praktikum div.Time {
+		background-color: rgb(48, 129, 169);
+	} */
 	.Tutorium {
 		background-color: rgb(234, 121, 200);
 	}
 	.Uebung {
 		background-color: rgb(121, 234, 147);
+	}
+
+	.Name {
+		/* border: 1px solid red; */
+		color:rgb(8, 77, 145);
+		text-decoration: underline;
+	}
+	.Raum {
+		color: #000;
+		/* border: 1px solid red; */
 	}
 	</style>
 </head>
@@ -35,15 +51,15 @@
 	<table>
 		<tr> <th>Std</th> <th>Mo</th> <th>Di</th> <th>Mi</th> <th>Do</th> <th>Fr</th> </tr>
 		
-		<tr> <td>08:00</td> <td></td> <td rowspan="6" class="Praktikum">IT-Pjm Praktikum</td> <td></td> <td></td> <td></td> </tr>
+		<tr> <td>08:00</td> <td></td> <td rowspan="6" class="Praktikum"><div class="Time">9:45 - 11:15</div><div class="Name">IT-Pjm Praktikum</div><div class="Raum">Is-H404</div></td> <td></td> <td></td> <td></td> </tr>
 		<tr> <td>08:15</td> <td></td> <td></td> <td></td> <td></td> </tr>
 		<tr> <td>08:30</td> <td></td> <td></td> <td></td> <td></td> </tr>
 		<tr> <td>08:45</td> <td></td> <td></td> <td></td> <td></td> </tr>
 		<tr> <td>09:00</td> <td></td> <td></td> <td></td> <td></td> </tr>
 		<tr> <td>09:15</td> <td></td> <td></td> <td></td> <td></td> </tr>
 		<tr> <td>09:30</td> <td></td> <td></td> <td></td> <td></td> <td></td> </tr>
-		<tr> <td>09:45</td> <td rowspan="6" class="Vorlesung">Java2 Vorlesung</td> <td></td> <td></td> <td></td> <td></td> </tr>
-		<tr> <td>10:00</td> <td rowspan="6" class="Praktikum">Java2 Praktikum</td> <td></td> <td rowspan="6" class="Vorlesung">Skriptsprachen Vorlesung</td> <td rowspan="6" class="Praktikum">Internet Technologien Praktikum</td> </tr>
+		<tr> <td>09:45</td> <td rowspan="6" class="Vorlesung"><div class="Name">Java2 Vorlesung</div><div class="Raum">Is-H401</div></td> <td></td> <td></td> <td></td> <td></td> </tr>
+		<tr> <td>10:00</td> <td rowspan="6" class="Praktikum"><div class="Name">Java2 Praktikum</div><div class="Raum">Is-H409</div></td> <td></td> <td rowspan="6" class="Vorlesung"><div class="Name">Skriptsprachen Vorlesung</div><div class="Raum">Is-H401</div></td> <td rowspan="6" class="Praktikum"><div class="Name">Internet Technologien Praktikum</div><div class="Raum">Is-H404</div></td> </tr>
 		<tr> <td>10:15</td> <td></td> </tr>
 		<tr> <td>10:30</td> <td></td> </tr>
 		<tr> <td>10:45</td> <td></td> </tr>
@@ -51,7 +67,7 @@
 		<tr> <td>11:15</td> <td></td> <td></td> </tr>
 		<tr> <td>11:30</td> <td></td> <td></td> <td></td> <td></td> <td></td> </tr>
 		<tr> <td>11:45</td> <td></td> <td></td> <td></td> <td></td> <td></td> </tr>
-		<tr> <td>12:00</td> <td rowspan="6" class="Vorlesung">Effiziente Algorithmen Vorlesung</td> <td></td> <td rowspan="6" class="Vorlesung">Internet Technologien Vorlesung</td> <td></td> <td rowspan="13" class="Uebung">Rechnernetze 2 Uebung</td> </tr>
+		<tr> <td>12:00</td> <td rowspan="6" class="Vorlesung"><div class="Name">Effiziente Algorithmen Vorlesung</div><div class="Raum">Is-H402/403</div></td> <td></td> <td rowspan="6" class="Vorlesung"><div class="Name">Internet Technologien Vorlesung</div><div class="Raum">Is-H401</div></td> <td></td> <td rowspan="13" class="Uebung"><div class="Name">Rechnernetze 2 Uebung</div><div class="Raum">Is-P105</div></td> </tr>
 		<tr> <td>12:15</td> <td></td> <td></td> </tr>
 		<tr> <td>12:30</td> <td></td> <td></td> </tr>
 		<tr> <td>12:45</td> <td></td> <td></td> </tr>
@@ -59,7 +75,7 @@
 		<tr> <td>13:15</td> <td></td> <td></td> </tr>
 		<tr> <td>13:30</td> <td></td> <td></td> <td></td> <td></td> </tr>
 		<tr> <td>13:45</td> <td></td> <td></td> <td></td> <td></td> </tr>
-		<tr> <td>14:00</td> <td rowspan="6" class="Vorlesung">IT-Pjm Vorlesung</td> <td></td> <td rowspan="6" class="Praktikum">Effiziente Algorithmen Praktikum</td> <td rowspan="6" class="Praktikum">Skriptsprachen Praktikum</td> </tr>
+		<tr> <td>14:00</td> <td rowspan="6" class="Vorlesung"><div class="Name">IT-Pjm Vorlesung</div><div class="Raum">Is-H402/403</div></td> <td></td> <td rowspan="6" class="Praktikum"><div class="Name">Effiziente Algorithmen Praktikum</div><div class="Raum">Is-H206</div></td> <td rowspan="6" class="Praktikum"><div class="Name">Skriptsprachen Praktikum</div><div class="Raum">Is-H409</div></td> </tr>
 		<tr> <td>14:15</td> <td></td> </tr>
 		<tr> <td>14:30</td> <td></td> </tr>
 		<tr> <td>14:45</td> <td></td> </tr>
@@ -67,7 +83,7 @@
 		<tr> <td>15:15</td> <td></td> <td></td> </tr>
 		<tr> <td>15:30</td> <td></td> <td></td> <td></td> <td></td> <td></td> </tr>
 		<tr> <td>15:45</td> <td></td> <td></td> <td></td> <td></td> <td></td> </tr>
-		<tr> <td>16:00</td> <td></td> <td></td> <td rowspan="4" class="Tutorium">Java2 Tutorium</td> <td></td> <td></td> </tr>
+		<tr> <td>16:00</td> <td></td> <td></td> <td rowspan="4" class="Tutorium"><div class="Name">Java2 Tutorium</div><div class="Raum">Online</div></td> <td></td> <td></td> </tr>
 		<tr> <td>16:15</td> <td></td> <td></td> <td></td> <td></td> </tr>
 		<tr> <td>16:30</td> <td></td> <td></td> <td></td> <td></td> </tr>
 		<tr> <td>16:45</td> <td></td> <td></td> <td></td> <td></td> </tr>
