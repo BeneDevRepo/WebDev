@@ -4,7 +4,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-	<title>Snake</title>
+	<title>Rockets</title>
 	<link rel="stylesheet" href="Rockets.css">
 	<script src="Rockets.js"></script>
 </head>
