@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+
+<head>
+	
+	<style>
+	table {
+		margin: 50px;
+		display: inline-block;
+	}
+	table, td, th {
+		border: 1px solid black;
+		border-spacing: 0px;
+	}
+	th, td {
+		padding: 20px;
+		background: white;
+	}
+	.collision1 {
+		border: 3px solid red;
+	}
+	.collision2 {
+		border: 3px solid green;
+	}
+	</style>
+</head>
+
+<body>
+	<table>
+		<tr> <th>Spalte 1</th> <th>Spalte 2</th> <th>Spalte 3</th> </tr>
+		<tr> <td>a</td> <td rowspan="3" class="collision1">Test Horizontal</td> <td>aaa</td> </tr>
+		<tr> <td colspan="3" class="collision2">Test Vertikal</td> </tr>
+		<tr> <td>c</td> <td>ccc</td> </tr>
+	</table>
+
+	<div class="Beobachtung">
+		Beobachtung: Ueberlappende zellen werden tatsaechlich ueberlappend dargestellt,
+		Und die Ueberlappten Zellen werden jeweils nach rechts verschoben.
+		Es laesst sich ausserdem beobachten, dass zumindest in diesem Fall die horizontale Zelle nach der vertikalen Zelle gerendert wird,
+		und dass der Hintergrund der horizontalen Zellen nach der Umrandung der vertikalen Zellen gerendert wird.
+		Ausserdem wird der Inhalt aller Zellen nach Hintergruenden aller Zellen gerendert.
+	</div>
+</body>
+
+</html>

@@ -10,7 +10,6 @@ Number.prototype.clamp = function(min, max) {
 
 
 let canvas;
-// let ctx;
 let gl;
 let shaderProgram;
 let shaderPositionAttributeLocation;

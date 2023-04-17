@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+
+<head>
+	
+	<style>
+	table {
+		margin: 50px;
+		display: inline-block;
+	}
+	table, td, th {
+		border: 1px solid black;
+		border-spacing: 0px;
+	}
+	th, td {
+		padding: 2px;
+	}
+	.cell {
+		border: 1px solid red;
+	}
+	</style>
+</head>
+
+<body>
+	<!-- 3 -->
+	<table>
+		<tr> <th>Spalte 1</th> <th>Spalte 2</th> <th>Spalte 3</th> </tr>
+		<tr> <td>a</td> <td>aa</td> <td>aaa</td> </tr>
+		<tr> <td>b</td> <td colspan="3" class="cell">cols 3</td> <td>bbb</td> </tr>
+		<tr> <td>c</td> <td>cc</td> <td>ccc</td> </tr>
+	</table>
+	<table>
+		<tr> <th>Spalte 1</th> <th>Spalte 2</th> <th>Spalte 3</th> </tr>
+		<tr> <td>a</td> <td>aa</td> <td>aaa</td> </tr>
+		<tr> <td>b</td> <td>bbb</td> <td colspan="3" class="cell">cols 3</td> </tr>
+		<tr> <td>c</td> <td>cc</td> <td>ccc</td> </tr>
+	</table>
+
+	<table>
+		<tr> <th>Spalte 1</th> <th>Spalte 2</th> <th>Spalte 3</th> </tr>
+		<tr> <td>a</td> <td>aa</td> <td>aaa</td> </tr>
+		<tr> <td>b</td> <td rowspan="3" class="cell">rows 3</td> <td>bbb</td> </tr>
+		<tr> <td>c</td> <td>cc</td> <td>ccc</td> </tr>
+	</table>
+	<table>
+		<tr> <th>Spalte 1</th> <th>Spalte 2</th> <th>Spalte 3</th> </tr>
+		<tr> <td>a</td> <td>aa</td> <td>aaa</td> </tr>
+		<tr> <td>b</td> <td>bb</td>  <td>bbb</td> </tr>
+		<tr> <td>c</td> <td rowspan="3" class="cell">rows 3</td> <td>ccc</td> </tr>
+	</table>
+
+	<div class="Beobachtung">
+		=> Falls rechts bzw. unter der von rowspan bzw. colspan beeinflussten Zelle noch weitere Zellen definiert sind,
+		dann werden diese Zellen nach rechts aus der Tabelle geschoben.
+		Andernfalls (Falls die beeinflusste Zelle am rechten bzw. unteren Rand der Tabelle steht) hat das Rowspan bzw. Colspan attribut keinen einfluss.
+	</div>
+
+
+	<!-- 1000 -->
+	<table>
+		<tr> <th>Spalte 1</th> <th>Spalte 2</th> <th>Spalte 1000</th> </tr>
+		<tr> <td>a</td> <td>aa</td> <td>aaa</td> </tr>
+		<tr> <td>b</td> <td colspan="1000" class="cell">cols 1000</td> <td>bbb</td> </tr>
+		<tr> <td>c</td> <td>cc</td> <td>ccc</td> </tr>
+	</table>
+	<table>
+		<tr> <th>Spalte 1</th> <th>Spalte 2</th> <th>Spalte 3</th> </tr>
+		<tr> <td>a</td> <td>aa</td> <td>aaa</td> </tr>
+		<tr> <td>b</td> <td>bbb</td> <td colspan="1000" class="cell">cols 1000</td> </tr>
+		<tr> <td>c</td> <td>cc</td> <td>ccc</td> </tr>
+	</table>
+
+	<table>
+		<tr> <th>Spalte 1</th> <th>Spalte 2</th> <th>Spalte 3</th> </tr>
+		<tr> <td>a</td> <td>aa</td> <td>aaa</td> </tr>
+		<tr> <td>b</td> <td rowspan="1000" class="cell">rows 1000</td> <td>bbb</td> </tr>
+		<tr> <td>c</td> <td>cc</td> <td>ccc</td> </tr>
+	</table>
+	<table>
+		<tr> <th>Spalte 1</th> <th>Spalte 2</th> <th>Spalte 3</th> </tr>
+		<tr> <td>a</td> <td>aa</td> <td>aaa</td> </tr>
+		<tr> <td>b</td> <td>bb</td>  <td>bbb</td> </tr>
+		<tr> <td>c</td> <td rowspan="1000" class="cell">rows 1000</td> <td>ccc</td> </tr>
+	</table>
+
+	<div class="Beobachtung">
+		=> Groessere Werte fuer Rowspan und Colspan scheinen sich identisch zu kleinen Werten zu verhalten
+	</div>
+
+
+	<!-- 32000 -->
+	<table>
+		<tr> <th>Spalte 1</th> <th>Spalte 2</th> <th>Spalte 32000</th> </tr>
+		<tr> <td>a</td> <td>aa</td> <td>aaa</td> </tr>
+		<tr> <td>b</td> <td colspan="32000" class="cell">cols 32000</td> <td>bbb</td> </tr>
+		<tr> <td>c</td> <td>cc</td> <td>ccc</td> </tr>
+	</table>
+	<table>
+		<tr> <th>Spalte 1</th> <th>Spalte 2</th> <th>Spalte 3</th> </tr>
+		<tr> <td>a</td> <td>aa</td> <td>aaa</td> </tr>
+		<tr> <td>b</td> <td>bbb</td> <td colspan="32000" class="cell">cols 32000</td> </tr>
+		<tr> <td>c</td> <td>cc</td> <td>ccc</td> </tr>
+	</table>
+
+	<table>
+		<tr> <th>Spalte 1</th> <th>Spalte 2</th> <th>Spalte 3</th> </tr>
+		<tr> <td>a</td> <td>aa</td> <td>aaa</td> </tr>
+		<tr> <td>b</td> <td rowspan="32000" class="cell">rows 32000</td> <td>bbb</td> </tr>
+		<tr> <td>c</td> <td>cc</td> <td>ccc</td> </tr>
+	</table>
+	<table>
+		<tr> <th>Spalte 1</th> <th>Spalte 2</th> <th>Spalte 3</th> </tr>
+		<tr> <td>a</td> <td>aa</td> <td>aaa</td> </tr>
+		<tr> <td>b</td> <td>bb</td>  <td>bbb</td> </tr>
+		<tr> <td>c</td> <td rowspan="32000" class="cell">rows 32000</td> <td>ccc</td> </tr>
+	</table>
+</body>
+
+</html>
