@@ -100,12 +100,31 @@ window.onload = function onload() {
 	gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
 	
-	document.onkeydown = keyDown;
-	document.onkeyup = keyUp;
+	canvas.onkeydown = keyDown;
+	canvas.onkeyup = keyUp;
 
-	gl.disable(gl.CULL_FACE);
-	// gl.enable(gl.CULL_FACE);
+	// canvas.onclick =
+	let capt =
+	() => {
+		const promise = canvas.requestPointerLock({
+			unadjustedMovement: true,
+		});
+
+		if(!promise) {
+			console.log("Error trying to capture cursor!");
+			return;
+		}
+
+		promise
+			.then(() => console.log("Captured Mouse"))
+			.catch((error) => console.log("Error trying to capture cursor:", error.name));
+	};
+	capt();
+
+	// gl.disable(gl.CULL_FACE);
+	gl.enable(gl.CULL_FACE);
 	// gl.cullFace(gl.BACK);
+	gl.cullFace(gl.FRONT);
 
 	// // MVP:
 	// let eye = vec3.fromValues(0., 0., 2.);
@@ -170,21 +189,18 @@ function loop() {
 
 	// MVP:
 	// let eye = vec3.fromValues(0., 0., 2.);
-	let eye = vec3.fromValues(Math.abs((prevTime * .03 % 100 * .02) - 1) * 2 - 1, 0., 2);
+	let eye = vec3.fromValues(Math.abs((prevTime * .03 % 100 * .02) - 1) * 4 - 2, -1., 6);
 	let target = vec3.fromValues(0., 0., 0.);
 	mat4.lookAt(view, eye, target, up);
 
 	mat4.perspective(
-		projection, 60 * 2 * 3.1415926 / 360,
+		projection, 90 * 2 * 3.1415926 / 360,
 		gl.canvas.width / gl.canvas.height,
 		.01, 1000);
 
 	mat4.copy(uniformMatrix, projection); // uniformMatrix = projection
 	mat4.multiply(uniformMatrix, uniformMatrix, view); // uniformMatrix *= view
 	mat4.multiply(uniformMatrix, uniformMatrix, model); // uniformMatrix *= model
-
-	
-	
 
 	
 	// set the view port size
@@ -205,33 +221,71 @@ function loop() {
 	gl.uniformMatrix4fv(mvpUniformLocation, false, uniformMatrix);
 
 	const cubeVerts = [
-		[-1, -1, -1],
-		[ 1, -1, -1],
-		[-1,  1, -1],
-		[ 1,  1, -1],
-		[-1, -1,  1],
-		[ 1, -1,  1],
-		[-1,  1,  1],
-		[ 1,  1,  1],
+		[0, 1, 0],
+		[1, 1, 0],
+		[0, 0, 0],
+		[1, 0, 0],
+		[0, 1, 1],
+		[1, 1, 1],
+		[0, 0, 1],
+		[1, 0, 1],
 	];
 
+
+	// 0 1  back
+	// 2 3
+
+	// 4 5  front
+	// 6 7
+
 	const cubeFaces = [
-		[0, 1, 2, 1, 2, 3],
+		[[1, 0, 3, 2], [0, 1, 2, 1, 3, 2]], // back
+		[[4, 5, 6, 7], [0, 1, 2, 1, 3, 2]], // front
+		[[0, 4, 2, 6], [0, 1, 2, 1, 3, 2]], // left
+		[[5, 1, 7, 3], [0, 1, 2, 1, 3, 2]], // right
+		[[0, 1, 4, 5], [0, 1, 2, 1, 3, 2]], // top
+		[[6, 7, 2, 3], [0, 1, 2, 1, 3, 2]], // bottom
+	];
+
+	const colors = [
+		[1, 0, 0],
+		[0, 1, 0],
+		[0, 0, 1],
 	];
 
 	let vertCount = 0;
 	let indCount = 0;
-	for(let f = 0; f < cubeFaces; f++) {
+	for(let f = 0; f < cubeFaces.length; f++) {
 		const face = cubeFaces[f];
 
-		for(let i = 0; i < 6; i++) {
-			const vertInd = face[i];
+		const verts = face[0];
+		const inds = face[1];
 
-			for(let dim = 0; dim < 3; dim++) {
-				vertex_buffer[vertCount * 6 + dim] = cubeVerts[vertInd][dim];
-				vertex_buffer[vertCount * 6 + 3 + dim] = 1.;
-			}
+		const vertCountBefore = vertCount;
+		const color = colors[Math.floor(f / 2)];
+
+		for(let v = 0; v < 4; v++) {
+			const vert = verts[v];
+
+			vertex_buffer[vertCount * 6 + 0] = cubeVerts[vert][0] - .5;
+			vertex_buffer[vertCount * 6 + 1] = cubeVerts[vert][1] - .5;
+			vertex_buffer[vertCount * 6 + 2] = cubeVerts[vert][2] - .5;
+			vertex_buffer[vertCount * 6 + 3] = color[0];
+			vertex_buffer[vertCount * 6 + 4] = color[1];
+			vertex_buffer[vertCount * 6 + 5] = color[2];
+			// vertex_buffer[vertCount * 6 + 3] = 1.;
+			// vertex_buffer[vertCount * 6 + 4] = 1.;
+			// vertex_buffer[vertCount * 6 + 5] = 1.;
+
 			vertCount++;
+		}
+	
+		for(let i = 0; i < 6; i++) {
+			const ind = inds[i];
+
+			index_buffer[indCount] = vertCountBefore + ind;
+
+			indCount++;
 		}
 		// for(let v = 0; v < 8; v++) {
 		// 	const vertInd = face[v];
@@ -243,6 +297,10 @@ function loop() {
 		// 	vertCount++;
 		// }
 	}
+
+	// console.log("Vertices", vertex_buffer);
+	// console.log("Indices", index_buffer);
+	// return;
 
 	// vertex_buffer[0 * 6 + 0] = -1;
 	// vertex_buffer[0 * 6 + 1] = 0;
@@ -279,8 +337,10 @@ function loop() {
 	// index_buffer[4] = 2;
 	// index_buffer[5] = 3;
 
-	const NUM_VERTS = 4;
-	const NUM_TRIS = 2;
+	const NUM_VERTS = vertCount;
+	const NUM_TRIS = indCount / 3;
+	// const NUM_VERTS = 4;
+	// const NUM_TRIS = 2;
 
 	gl.bindBuffer(gl.ARRAY_BUFFER, shaderPositionBuffer);
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, shaderIndexBuffer);
