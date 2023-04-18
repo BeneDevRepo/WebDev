@@ -45,6 +45,8 @@ let game = {
 	player: {
 		pos: vec3.fromValues(4, 0, 10),
 		eye: vec3.fromValues(0, 1.8, 0),
+		rx: 0., // rotation around x axis (-90 ... 90)
+		ry: 0., // rotation around y axis (0 ... 360)
 	},
 	chunks: [],
 };
@@ -118,7 +120,7 @@ window.onload = function onload() {
 	
 	document.onkeydown = keyDown;
 	document.onkeyup = keyUp;
-
+	
 	let capt =
 	() => {
 		const promise = canvas.requestPointerLock({
@@ -129,15 +131,17 @@ window.onload = function onload() {
 			console.log("Error trying to capture cursor!");
 			return;
 		}
-
+		
 		promise
 			.then(() => console.log("Captured Mouse"))
 			.catch((error) => console.log("Error trying to capture cursor:", error.name));
+
 	};
 	// capt();
-	// canvas.onclick = capt;
-
-
+	canvas.onclick = capt;
+	canvas.onmousemove = mouseMove;
+	
+	
 	// backface culling:
 	// gl.disable(gl.CULL_FACE);
 	gl.enable(gl.CULL_FACE);
@@ -188,30 +192,22 @@ window.onload = function onload() {
 }
 
 function keyDown(event) {
-	// console.log("Key Down: ", event.key);
 	game.keys[event.key.toLowerCase()] = true;
-	// console.log("Key Down: ", event.keyCode);
-	// if(event.keyCode == 37) // left
-	// 	game.dir = Direction.left;
-	// if(event.keyCode == 39) // right
-	// 	game.dir = Direction.right;
-
-	// if(event.keyCode == 40) // down
-	// 	game.dir = Direction.down;
-	// if(event.keyCode == 38) // up
-	// 	game.dir = Direction.up;
-	
-	// if(event.key == "r")
-	// 	game.ball.reset();
+	// console.log("Key Down: ", event.key, event.keyCode);
 }
 
 function keyUp(event) {
 	game.keys[event.key.toLowerCase()] = false;
-	// console.log("Key Up: " + event.keyCode);
-	// if(event.keyCode == 37 || event.keyCode == 40)
-	// 	game.keyDown = false;
-	// if(event.keyCode == 39 || event.keyCode == 38)
-	// 	game.keyUp = false;
+}
+
+function mouseMove(event) {
+	let dx = event.movementX;
+	let dy = event.movementY;
+	if(document.pointerLockElement != null) { // if mouse is captured
+		game.player.rx -= dy * .01;
+		game.player.ry -= dx * .01;
+		// console.log(dx, dy);
+	}
 }
 
 let lastLaunch = performance.now();
@@ -254,9 +250,15 @@ function loop() {
 	// let eye = vec3.fromValues(Math.abs((prevTime * .03 % 100 * .02) - 1) * 4 - 2, 2., 8);
 	let eye = vec3.create();
 	vec3.add(eye, game.player.pos, game.player.eye);
-	let target = vec3.fromValues(0., 0., 0.);
+	// let target = vec3.fromValues(0., 0., 0.);
+	// mat4.lookAt(view, eye, target, up);
+	let lookDir = vec3.fromValues(0, 0, -1);
+	vec3.rotateX(lookDir, lookDir, vec3.create(), game.player.rx);
+	vec3.rotateY(lookDir, lookDir, vec3.create(), game.player.ry);
+	let target = vec3.create();
+	vec3.add(target, eye, lookDir);
+
 	mat4.lookAt(view, eye, target, up);
-	mat4.lookAt(view, eye, vec3.fromValues(eye[0], eye[1], eye[2]-1), up);
 
 	mat4.perspective(
 		projection, 90 * 2 * 3.1415926 / 360,
