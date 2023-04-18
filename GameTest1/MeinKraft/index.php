@@ -4,13 +4,13 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-	<title>Rockets</title>
+	<title>MeinKraft</title>
 	<link rel="stylesheet" href="MeinKraft.css">
 	<script type="module" src="MeinKraft.js"></script>
 </head>
 
 <body>
-	<h1>Rockets</h1>
+	<h1>MeinKraft</h1>
 
 	<div id="game">
 		<div id="fps"><b>3 FPS</b></div>

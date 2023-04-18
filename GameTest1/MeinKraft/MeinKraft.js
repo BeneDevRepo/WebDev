@@ -10,6 +10,13 @@ Number.prototype.clamp = function(min, max) {
 	return Math.min(Math.max(this, min), max);
 };
 
+const BlockType = Object.freeze({
+	AIR: "Air",
+	STONE: "Stone",
+	DIRT: "Dirt",
+	GRASS: "Grass",
+});
+
 
 let canvas;
 let gl;
@@ -29,8 +36,17 @@ let index_buffer = new Int16Array(MAX_TRIANGLES * 3);
 
 
 let game = {
-	rockets: [],
-	particles: [],
+	keys: {
+		"w": false,
+		"a": false,
+		"s": false,
+		"d": false,
+	},
+	player: {
+		pos: vec3.fromValues(4, 0, 10),
+		eye: vec3.fromValues(0, 1.8, 0),
+	},
+	chunks: [],
 };
 
 
@@ -100,10 +116,9 @@ window.onload = function onload() {
 	gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
 	
-	canvas.onkeydown = keyDown;
-	canvas.onkeyup = keyUp;
+	document.onkeydown = keyDown;
+	document.onkeyup = keyUp;
 
-	// canvas.onclick =
 	let capt =
 	() => {
 		const promise = canvas.requestPointerLock({
@@ -119,36 +134,62 @@ window.onload = function onload() {
 			.then(() => console.log("Captured Mouse"))
 			.catch((error) => console.log("Error trying to capture cursor:", error.name));
 	};
-	capt();
+	// capt();
+	// canvas.onclick = capt;
 
+
+	// backface culling:
 	// gl.disable(gl.CULL_FACE);
 	gl.enable(gl.CULL_FACE);
 	// gl.cullFace(gl.BACK);
 	gl.cullFace(gl.FRONT);
 
-	// // MVP:
-	// let eye = vec3.fromValues(0., 0., 2.);
-	// let target = vec3.fromValues(0., 0., 0.);
-	// mat4.lookAt(view, eye, target, up);
 
-	// mat4.perspective(
-	// 	projection, 60 * 2 * 3.1415926 / 360,
-	// 	gl.canvas.width / gl.canvas.height,
-	// 	.01, 1000);
+	// depth testing
+	gl.enable(gl.DEPTH_TEST);
+	gl.depthFunc(gl.LEQUAL);
 
 
-	// // mat4.fromRotation(model, 10 * 3.1415926535 / 180, vec3.fromValues(0, 0, -1));
-	// // mat4.fromRotation(model, 10 * 3.1415926535 / 180, vec3.fromValues(1, 0, 0));
+	let blocks = [];
+	for(let y = 0; y < 4; y++) {
+		let layer = [];
+
+		for(let z = 0; z < 4; z++) {
+			let strip = [];
+
+			for(let x = 0; x < 4; x++) {
+				if(y < 2)
+					strip.push(BlockType.STONE);
+				else
+					strip.push(
+						Math.floor(x+y+z)%2==0
+						? BlockType.AIR
+						: BlockType.STONE);
+			}
+
+			layer.push(strip)
+		}
+
+		blocks.push(layer);
+	}
+
+	let chunk = {
+		x: 0, z: 0,
+		blocks: [],
+	};
+	chunk.blocks = blocks;
 	
+	game.chunks.push(chunk);
 
-	// mat4.copy(uniformMatrix, projection); // uniformMatrix = projection
-	// mat4.multiply(uniformMatrix, uniformMatrix, view); // uniformMatrix *= view
-	// mat4.multiply(uniformMatrix, uniformMatrix, model); // uniformMatrix *= model
+	// console.log(chunk)
 
+	
 	requestAnimationFrame(loop);
 }
 
 function keyDown(event) {
+	// console.log("Key Down: ", event.key);
+	game.keys[event.key.toLowerCase()] = true;
 	// console.log("Key Down: ", event.keyCode);
 	// if(event.keyCode == 37) // left
 	// 	game.dir = Direction.left;
@@ -165,6 +206,7 @@ function keyDown(event) {
 }
 
 function keyUp(event) {
+	game.keys[event.key.toLowerCase()] = false;
 	// console.log("Key Up: " + event.keyCode);
 	// if(event.keyCode == 37 || event.keyCode == 40)
 	// 	game.keyDown = false;
@@ -185,13 +227,36 @@ function loop() {
 	document.getElementById("fps").innerText = "Fps: " + Math.floor(1. / dt);
 
 
+	let vel = vec3.create();
+	if(game.keys["w"])
+		vec3.add(vel, vel, vec3.fromValues(0, 0, -1));
+	if(game.keys["s"])
+		vec3.add(vel, vel, vec3.fromValues(0, 0, 1));
+
+	if(game.keys["a"])
+		vec3.add(vel, vel, vec3.fromValues(-1, 0, 0));
+	if(game.keys["d"])
+		vec3.add(vel, vel, vec3.fromValues(1, 0, 0));
+
+	if(game.keys["shift"])
+		vec3.add(vel, vel, vec3.fromValues(0, -1, 0));
+	if(game.keys[" "])
+		vec3.add(vel, vel, vec3.fromValues(0, 1, 0));
+
+	vec3.scale(vel, vel, dt);
+	// console.log(vel);
+	vec3.add(game.player.pos, game.player.pos, vel);
+	
 
 
 	// MVP:
 	// let eye = vec3.fromValues(0., 0., 2.);
-	let eye = vec3.fromValues(Math.abs((prevTime * .03 % 100 * .02) - 1) * 4 - 2, -1., 6);
+	// let eye = vec3.fromValues(Math.abs((prevTime * .03 % 100 * .02) - 1) * 4 - 2, 2., 8);
+	let eye = vec3.create();
+	vec3.add(eye, game.player.pos, game.player.eye);
 	let target = vec3.fromValues(0., 0., 0.);
 	mat4.lookAt(view, eye, target, up);
+	mat4.lookAt(view, eye, vec3.fromValues(eye[0], eye[1], eye[2]-1), up);
 
 	mat4.perspective(
 		projection, 90 * 2 * 3.1415926 / 360,
@@ -255,48 +320,59 @@ function loop() {
 
 	let vertCount = 0;
 	let indCount = 0;
-	for(let f = 0; f < cubeFaces.length; f++) {
-		const face = cubeFaces[f];
 
-		const verts = face[0];
-		const inds = face[1];
-
-		const vertCountBefore = vertCount;
-		const color = colors[Math.floor(f / 2)];
-
-		for(let v = 0; v < 4; v++) {
-			const vert = verts[v];
-
-			vertex_buffer[vertCount * 6 + 0] = cubeVerts[vert][0] - .5;
-			vertex_buffer[vertCount * 6 + 1] = cubeVerts[vert][1] - .5;
-			vertex_buffer[vertCount * 6 + 2] = cubeVerts[vert][2] - .5;
-			vertex_buffer[vertCount * 6 + 3] = color[0];
-			vertex_buffer[vertCount * 6 + 4] = color[1];
-			vertex_buffer[vertCount * 6 + 5] = color[2];
-			// vertex_buffer[vertCount * 6 + 3] = 1.;
-			// vertex_buffer[vertCount * 6 + 4] = 1.;
-			// vertex_buffer[vertCount * 6 + 5] = 1.;
-
-			vertCount++;
-		}
+	let emitCube = (x, y, z) => {
+		for(let f = 0; f < cubeFaces.length; f++) {
+			const face = cubeFaces[f];
 	
-		for(let i = 0; i < 6; i++) {
-			const ind = inds[i];
-
-			index_buffer[indCount] = vertCountBefore + ind;
-
-			indCount++;
+			const verts = face[0];
+			const inds = face[1];
+	
+			const vertCountBefore = vertCount;
+			const color = colors[Math.floor(f / 2)];
+	
+			for(let v = 0; v < 4; v++) {
+				const vert = verts[v];
+	
+				vertex_buffer[vertCount * 6 + 0] = cubeVerts[vert][0] + x;
+				vertex_buffer[vertCount * 6 + 1] = cubeVerts[vert][1] + y;
+				vertex_buffer[vertCount * 6 + 2] = cubeVerts[vert][2] + z;
+				vertex_buffer[vertCount * 6 + 3] = color[0];
+				vertex_buffer[vertCount * 6 + 4] = color[1];
+				vertex_buffer[vertCount * 6 + 5] = color[2];
+				// vertex_buffer[vertCount * 6 + 3] = 1.;
+				// vertex_buffer[vertCount * 6 + 4] = 1.;
+				// vertex_buffer[vertCount * 6 + 5] = 1.;
+	
+				vertCount++;
+			}
+		
+			for(let i = 0; i < 6; i++) {
+				const ind = inds[i];
+	
+				index_buffer[indCount] = vertCountBefore + ind;
+	
+				indCount++;
+			}
 		}
-		// for(let v = 0; v < 8; v++) {
-		// 	const vertInd = face[v];
+	};
 
-		// 	for(let dim = 0; dim < 3; dim++) {
-		// 		vertex_buffer[vertCount * 6 + dim] = cubeVerts[vertInd][dim];
-		// 		vertex_buffer[vertCount * 6 + 3 + dim] = 1.;
-		// 	}
-		// 	vertCount++;
-		// }
+	for(const chunk of game.chunks) {
+		for(let y = 0; y < 4; y++) {
+			for(let z = 0; z < 4; z++) {
+				for(let x = 0; x < 4; x++) {
+					if(chunk.blocks[y][z][x] != BlockType.AIR)
+						emitCube(x, y, z);
+				}
+			}
+		}
 	}
+
+	// emitCube(0, 0, 0);
+	// emitCube(1, 0, 0);
+	// emitCube(0, 1, 0);
+	// emitCube(-1, -1, 0);
+
 
 	// console.log("Vertices", vertex_buffer);
 	// console.log("Indices", index_buffer);
