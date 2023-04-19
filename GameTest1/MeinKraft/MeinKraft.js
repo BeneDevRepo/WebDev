@@ -20,12 +20,19 @@ const BlockType = Object.freeze({
 
 let canvas;
 let gl;
+
 let shaderProgram;
-let shaderPositionAttributeLocation;
-let shaderColorAttributeLocation
+
 let shaderPositionBuffer;
+let shaderPositionAttributeLocation;
+
 let shaderIndexBuffer;
+let shaderColorAttributeLocation;
+
+let texture;
+
 let mvpUniformLocation;
+let textureUniformLocation;
 
 
 const MAX_VERTICES = 1024 * 1024;
@@ -87,10 +94,13 @@ window.onload = function onload() {
 
 		in vec3 color;
 
+		uniform sampler2D u_texture;
+
 		out vec4 fragColor;
 		
 		void main() {
-			fragColor = vec4(color, 1.);
+			// fragColor = vec4(color, 1.);
+			fragColor = vec4(texture(u_texture, color.xy).rgb, 1.);
 		}
 		`;
 
@@ -102,7 +112,13 @@ window.onload = function onload() {
 	shaderIndexBuffer = gl.createBuffer();
 
 	mvpUniformLocation = gl.getUniformLocation(shaderProgram, "u_mvp");
+	textureUniformLocation = gl.getUniformLocation(shaderProgram, "u_texture");
 
+
+	// Flip image pixels into the bottom-to-top order that WebGL expects.
+	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+
+	texture = webgl.loadTexture(gl, "rick.jpg");
 
 
 	// tell the shader to load our data from the buffer we just made:
@@ -120,6 +136,14 @@ window.onload = function onload() {
 	
 	document.onkeydown = keyDown;
 	document.onkeyup = keyUp;
+
+	document.addEventListener(
+		'beforeunload',
+		function(e){
+			e.stopPropagation();e.preventDefault();return false;
+		},
+		true
+	);
 	
 	let capt =
 	() => {
@@ -153,43 +177,54 @@ window.onload = function onload() {
 	gl.enable(gl.DEPTH_TEST);
 	gl.depthFunc(gl.LEQUAL);
 
+	const CHUNK_SIZE = 8;
+	const CHUNK_WIDTH = CHUNK_SIZE;
+	const CHUNK_HEIGHT = CHUNK_SIZE;
+	const CHUNK_DEPTH = CHUNK_SIZE;
 
-	let blocks = [];
-	for(let y = 0; y < 4; y++) {
-		let layer = [];
-
-		for(let z = 0; z < 4; z++) {
-			let strip = [];
-
-			for(let x = 0; x < 4; x++) {
-				if(y < 2)
-					strip.push(BlockType.STONE);
-				else
-					strip.push(
-						Math.floor(x+y+z)%2==0
+	const create_chunk = (x, y, z) => {
+		let blocks = makeArray(CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH); // [x][y][z]
+		for(let x = 0; x < CHUNK_WIDTH; x++) {
+			for(let y = 0; y < CHUNK_HEIGHT; y++) {
+				for(let z = 0; z < CHUNK_DEPTH; z++) {
+					blocks[x][y][z] = 
+						// (Math.floor(Math.floor(x/2)+Math.floor(y/2)+Math.floor(z/2)) % 2 == 0)
+						// (y >= 2) && (Math.floor(x+y+z) % 2 == 0)
+						// (Math.floor(x+y+z) % 2 == 0)
+						false
 						? BlockType.AIR
-						: BlockType.STONE);
+						: BlockType.STONE;
+				}
 			}
-
-			layer.push(strip)
 		}
-
-		blocks.push(layer);
-	}
-
-	let chunk = {
-		x: 0, z: 0,
-		blocks: [],
+		return {
+			"x": x, "y": y, "z": z,
+			width: CHUNK_WIDTH, height: CHUNK_HEIGHT, depth: CHUNK_DEPTH,
+			"blocks": blocks,
+		};
 	};
-	chunk.blocks = blocks;
-	
-	game.chunks.push(chunk);
 
-	// console.log(chunk)
+
+	game.chunks.push(create_chunk(0, 3, 0));
+	game.chunks.push(create_chunk(0, 2, 0));
+	game.chunks.push(create_chunk(0, 1, 0));
+	game.chunks.push(create_chunk(1, 0, 0));
+
+	game.chunks.push(create_chunk(-1, 0, 0));
+	game.chunks.push(create_chunk(0, 0, 0));
 
 	
 	requestAnimationFrame(loop);
 }
+
+// prevent accidentally closing tab
+// window.onbeforeunload = function (e) {
+//     // Cancel the event
+//     e.preventDefault();
+
+//     // Chrome requires returnValue to be set
+//     e.returnValue = 'Really want to quit the game?';
+// };
 
 function keyDown(event) {
 	game.keys[event.key.toLowerCase()] = true;
@@ -201,16 +236,17 @@ function keyUp(event) {
 }
 
 function mouseMove(event) {
+	const degPerPixel = .2;
 	let dx = event.movementX;
 	let dy = event.movementY;
 	if(document.pointerLockElement != null) { // if mouse is captured
-		game.player.rx -= dy * .01;
-		game.player.ry -= dx * .01;
+		game.player.rx -= dy * degPerPixel * 3.1415926535 / 180;
+		game.player.ry -= dx * degPerPixel * 3.1415926535 / 180;
+		game.player.rx = game.player.rx.clamp(-3.1414/2, 3.1414/2);
 		// console.log(dx, dy);
 	}
 }
 
-let lastLaunch = performance.now();
 let prevTime = performance.now();
 function loop() {
 	const curTime = performance.now();
@@ -223,6 +259,7 @@ function loop() {
 	document.getElementById("fps").innerText = "Fps: " + Math.floor(1. / dt);
 
 
+	const speed = 6.; // blocks / sec
 	let vel = vec3.create();
 	if(game.keys["w"])
 		vec3.add(vel, vel, vec3.fromValues(0, 0, -1));
@@ -238,8 +275,11 @@ function loop() {
 		vec3.add(vel, vel, vec3.fromValues(0, -1, 0));
 	if(game.keys[" "])
 		vec3.add(vel, vel, vec3.fromValues(0, 1, 0));
+		
+	vec3.scale(vel, vel, speed * dt);
 
-	vec3.scale(vel, vel, dt);
+	// vec3.rotateX(vel, vel, vec3.create(), game.player.rx);
+	vec3.rotateY(vel, vel, vec3.create(), game.player.ry);
 	// console.log(vel);
 	vec3.add(game.player.pos, game.player.pos, vel);
 	
@@ -279,13 +319,15 @@ function loop() {
 	
 	// use program
 	gl.useProgram(shaderProgram);
-
-	// bind buffer
-	gl.bindBuffer(gl.ARRAY_BUFFER, shaderPositionBuffer);
 	
 	// set uniforms
 	// gl.uniform1f(pointSizeUniformLocation, 20);
 	gl.uniformMatrix4fv(mvpUniformLocation, false, uniformMatrix);
+
+	// setup texture
+	gl.activeTexture(gl.TEXTURE0); // next commands should affect texture unit 0
+	gl.bindTexture(gl.TEXTURE_2D, texture); // bind texture to texture unit 0
+	gl.uniform1i(textureUniformLocation, 0); // set sampler to reference texture unit 0
 
 	const cubeVerts = [
 		[0, 1, 0],
@@ -305,46 +347,55 @@ function loop() {
 	// 4 5  front
 	// 6 7
 
-	const cubeFaces = [
-		[[1, 0, 3, 2], [0, 1, 2, 1, 3, 2]], // back
-		[[4, 5, 6, 7], [0, 1, 2, 1, 3, 2]], // front
-		[[0, 4, 2, 6], [0, 1, 2, 1, 3, 2]], // left
-		[[5, 1, 7, 3], [0, 1, 2, 1, 3, 2]], // right
-		[[0, 1, 4, 5], [0, 1, 2, 1, 3, 2]], // top
-		[[6, 7, 2, 3], [0, 1, 2, 1, 3, 2]], // bottom
+	const uvCoords = [
+		[0, 1],
+		[1, 1],
+		[0, 0],
+		[1, 0],
 	];
 
-	const colors = [
-		[1, 0, 0],
-		[0, 1, 0],
-		[0, 0, 1],
+	const cubeFaces = [
+		[[0, 4, 2, 6], [0, 1, 2, 1, 3, 2]], // left
+		[[5, 1, 7, 3], [0, 1, 2, 1, 3, 2]], // right
+		[[6, 7, 2, 3], [0, 1, 2, 1, 3, 2]], // bottom
+		[[0, 1, 4, 5], [0, 1, 2, 1, 3, 2]], // top
+		[[1, 0, 3, 2], [0, 1, 2, 1, 3, 2]], // back
+		[[4, 5, 6, 7], [0, 1, 2, 1, 3, 2]], // front
 	];
+
+	// const colors = [
+	// 	[1, 0, 0],
+	// 	[0, 1, 0],
+	// 	[0, 0, 1],
+	// ];
 
 	let vertCount = 0;
 	let indCount = 0;
 
-	let emitCube = (x, y, z) => {
+	let emitCube = (x, y, z, cull={}) => {
 		for(let f = 0; f < cubeFaces.length; f++) {
+			if(cull[f]) continue;
+
 			const face = cubeFaces[f];
 	
 			const verts = face[0];
 			const inds = face[1];
 	
 			const vertCountBefore = vertCount;
-			const color = colors[Math.floor(f / 2)];
+			// const color = colors[Math.floor(f / 2)];
 	
 			for(let v = 0; v < 4; v++) {
 				const vert = verts[v];
-	
-				vertex_buffer[vertCount * 6 + 0] = cubeVerts[vert][0] + x;
-				vertex_buffer[vertCount * 6 + 1] = cubeVerts[vert][1] + y;
-				vertex_buffer[vertCount * 6 + 2] = cubeVerts[vert][2] + z;
-				vertex_buffer[vertCount * 6 + 3] = color[0];
-				vertex_buffer[vertCount * 6 + 4] = color[1];
-				vertex_buffer[vertCount * 6 + 5] = color[2];
-				// vertex_buffer[vertCount * 6 + 3] = 1.;
-				// vertex_buffer[vertCount * 6 + 4] = 1.;
-				// vertex_buffer[vertCount * 6 + 5] = 1.;
+
+				vertex_buffer[vertCount * 6 + 0] = x + cubeVerts[vert][0];
+				vertex_buffer[vertCount * 6 + 1] = y + cubeVerts[vert][1];
+				vertex_buffer[vertCount * 6 + 2] = z + cubeVerts[vert][2];
+				vertex_buffer[vertCount * 6 + 3] = uvCoords[v][0];
+				vertex_buffer[vertCount * 6 + 4] = uvCoords[v][1];
+				vertex_buffer[vertCount * 6 + 5] = 0.;
+				// vertex_buffer[vertCount * 6 + 3] = color[0];
+				// vertex_buffer[vertCount * 6 + 4] = color[1];
+				// vertex_buffer[vertCount * 6 + 5] = color[2];
 	
 				vertCount++;
 			}
@@ -360,11 +411,32 @@ function loop() {
 	};
 
 	for(const chunk of game.chunks) {
-		for(let y = 0; y < 4; y++) {
-			for(let z = 0; z < 4; z++) {
-				for(let x = 0; x < 4; x++) {
-					if(chunk.blocks[y][z][x] != BlockType.AIR)
-						emitCube(x, y, z);
+		const blocks = chunk.blocks;
+		for(let y = 0; y < chunk.height; y++) {
+			for(let z = 0; z < chunk.depth; z++) {
+				for(let x = 0; x < chunk.width; x++) {
+					if(blocks[x][y][z] != BlockType.AIR) {
+						let cull = {};
+						for(let dim = 0; dim < 3; dim++) {
+							const pos = [x, y, z];
+							const size = [chunk.width, chunk.height, chunk.depth];
+							let posMin = [x, y, z]; posMin[dim]--;
+							let posMax = [x, y, z]; posMax[dim]++;
+
+							if(pos[dim] > 0)
+								if(blocks[posMin[0]][posMin[1]][posMin[2]] != BlockType.AIR)
+									cull[dim * 2] = true;
+							if(pos[dim] < size[dim]-1)
+								if(blocks[posMax[0]][posMax[1]][posMax[2]] != BlockType.AIR)
+									cull[dim * 2 + 1] = true;
+						}
+
+
+						emitCube(
+							chunk.x * chunk.width + x,
+							chunk.y * chunk.height + y,
+							chunk.z * chunk.depth + z, cull);
+					}
 				}
 			}
 		}
@@ -375,59 +447,29 @@ function loop() {
 	// emitCube(0, 1, 0);
 	// emitCube(-1, -1, 0);
 
-
-	// console.log("Vertices", vertex_buffer);
-	// console.log("Indices", index_buffer);
-	// return;
-
-	// vertex_buffer[0 * 6 + 0] = -1;
-	// vertex_buffer[0 * 6 + 1] = 0;
-	// vertex_buffer[0 * 6 + 2] = 0;
-	// vertex_buffer[0 * 6 + 3] = 1.;
-	// vertex_buffer[0 * 6 + 4] = 0;
-	// vertex_buffer[0 * 6 + 5] = 0;
-
-	// vertex_buffer[1 * 6 + 0] = 0;
-	// vertex_buffer[1 * 6 + 1] = 1;
-	// vertex_buffer[1 * 6 + 2] = 0;
-	// vertex_buffer[1 * 6 + 3] = 0;
-	// vertex_buffer[1 * 6 + 4] = 1.;
-	// vertex_buffer[1 * 6 + 5] = 0;
-
-	// vertex_buffer[2 * 6 + 0] = 0;
-	// vertex_buffer[2 * 6 + 1] = 0;
-	// vertex_buffer[2 * 6 + 2] = 0;
-	// vertex_buffer[2 * 6 + 3] = 0;
-	// vertex_buffer[2 * 6 + 4] = 0;
-	// vertex_buffer[2 * 6 + 5] = 1.;
-
-	// vertex_buffer[3 * 6 + 0] = -1;
-	// vertex_buffer[3 * 6 + 1] = 1;
-	// vertex_buffer[3 * 6 + 2] = 0;
-	// vertex_buffer[3 * 6 + 3] = 1;
-	// vertex_buffer[3 * 6 + 4] = 0;
-	// vertex_buffer[3 * 6 + 5] = 1.;
-
-	// index_buffer[0] = 0;
-	// index_buffer[1] = 1;
-	// index_buffer[2] = 2;
-	// index_buffer[3] = 1;
-	// index_buffer[4] = 2;
-	// index_buffer[5] = 3;
-
 	const NUM_VERTS = vertCount;
-	const NUM_TRIS = indCount / 3;
-	// const NUM_VERTS = 4;
-	// const NUM_TRIS = 2;
+	const NUM_INDS = indCount;
 
 	gl.bindBuffer(gl.ARRAY_BUFFER, shaderPositionBuffer);
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, shaderIndexBuffer);
 
 	gl.bufferData(gl.ARRAY_BUFFER, vertex_buffer, gl.DYNAMIC_DRAW, 0, NUM_VERTS * 6);
-	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, index_buffer, gl.DYNAMIC_DRAW, 0, NUM_TRIS * 3);
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, index_buffer, gl.DYNAMIC_DRAW, 0, NUM_INDS);
 
-	gl.drawElements(gl.TRIANGLES, NUM_TRIS * 3, gl.UNSIGNED_SHORT, 0);
+	gl.drawElements(gl.TRIANGLES, NUM_INDS, gl.UNSIGNED_SHORT, 0);
 
 
 	requestAnimationFrame(loop);
+}
+
+
+function makeArray(...dimensions) {
+	if(dimensions.length == 1)
+		return new Array(dimensions[0]);
+
+	let arr = new Array(dimensions[0]);
+	for(let i = 0; i < arr.length; i++)
+		arr[i] = makeArray(...dimensions.slice(1));
+
+	return arr;
 }
