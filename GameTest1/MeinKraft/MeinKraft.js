@@ -434,8 +434,10 @@ function loop() {
 
 	// for(const chunk of game.chunks) {
 	for(const [chunkPos, chunk] of Object.entries(game.chunks)) {
-		// if(!chunk.cubesChanged)
-		// 	continue;
+		if(!chunk.mesh.cubesChanged)
+			continue;
+
+		chunk.mesh.cubesChanged = false;
 		
 		const blocks = chunk.blocks;
 
@@ -487,7 +489,7 @@ function loop() {
 
 	gl.bindBuffer(gl.ARRAY_BUFFER, shaderPositionBuffer);
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, shaderIndexBuffer);
-
+	
 	for(const [chunkPos, chunk] of Object.entries(game.chunks)) {
 		gl.bufferData(gl.ARRAY_BUFFER, chunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numVertices * 6);
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, chunk.mesh.indices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numIndices);
