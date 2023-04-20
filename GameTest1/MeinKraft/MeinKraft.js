@@ -1,6 +1,5 @@
 import * as webgl from './WebGL.js';
 import * as mat4 from './glMatrix/mat4.js';
-import * as vec4 from './glMatrix/vec4.js';
 import * as vec3 from './glMatrix/vec3.js';
 
 const vert = x => x;
@@ -182,7 +181,7 @@ window.onload = function onload() {
 	const CHUNK_HEIGHT = CHUNK_SIZE;
 	const CHUNK_DEPTH = CHUNK_SIZE;
 
-	const create_chunk = (x, y, z) => {
+	const create_blocks = (x, y, z) => {
 		let blocks = makeArray(CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH); // [x][y][z]
 		for(let x = 0; x < CHUNK_WIDTH; x++) {
 			for(let y = 0; y < CHUNK_HEIGHT; y++) {
@@ -197,21 +196,44 @@ window.onload = function onload() {
 				}
 			}
 		}
+		return blocks;
+	};
+
+	const create_chunk = (x, y, z) => {
+		const blocks = create_blocks(x, y, z);
+
+		const MAX_VERTICES = CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * 4;
+		const MAX_INDICES = CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * 6;
+		
 		return {
 			"x": x, "y": y, "z": z,
 			width: CHUNK_WIDTH, height: CHUNK_HEIGHT, depth: CHUNK_DEPTH,
 			"blocks": blocks,
+			mesh: {
+				vertices: new Float32Array(MAX_VERTICES * 6),
+				indices: new Int16Array(MAX_INDICES),
+				numVertices: 0, numIndices: 0,
+				cubesChanged: true, meshChanged: false,
+			},
 		};
 	};
 
+	game.chunks = {};
 
-	game.chunks.push(create_chunk(0, 3, 0));
-	game.chunks.push(create_chunk(0, 2, 0));
-	game.chunks.push(create_chunk(0, 1, 0));
-	game.chunks.push(create_chunk(1, 0, 0));
 
-	game.chunks.push(create_chunk(-1, 0, 0));
-	game.chunks.push(create_chunk(0, 0, 0));
+	// game.chunks.push(create_chunk(0, 3, 0));
+	// game.chunks.push(create_chunk(0, 2, 0));
+	// game.chunks.push(create_chunk(0, 1, 0));
+
+	// game.chunks.push(create_chunk(-1, 0, 0));
+	// game.chunks.push(create_chunk(0, 0, 0));
+	// game.chunks.push(create_chunk(1, 0, 0));
+
+	game.chunks[[-1, 0, 0]] = create_chunk(-1, 0, 0);
+	game.chunks[[0, 0, 0]] = create_chunk(0, 0, 0);
+	game.chunks[(1, 0, 0)] = create_chunk(1, 0, 0);
+
+	console.log(game.chunks);
 
 	
 	requestAnimationFrame(loop);
@@ -369,10 +391,8 @@ function loop() {
 	// 	[0, 0, 1],
 	// ];
 
-	let vertCount = 0;
-	let indCount = 0;
 
-	let emitCube = (x, y, z, cull={}) => {
+	let emitCube = (x, y, z, cull={}, vertices, indices, numVertices, numIndices) => {
 		for(let f = 0; f < cubeFaces.length; f++) {
 			if(cull[f]) continue;
 
@@ -380,38 +400,48 @@ function loop() {
 	
 			const verts = face[0];
 			const inds = face[1];
-	
-			const vertCountBefore = vertCount;
+
+			const vertCountBefore = numVertices;
 			// const color = colors[Math.floor(f / 2)];
 	
 			for(let v = 0; v < 4; v++) {
 				const vert = verts[v];
 
-				vertex_buffer[vertCount * 6 + 0] = x + cubeVerts[vert][0];
-				vertex_buffer[vertCount * 6 + 1] = y + cubeVerts[vert][1];
-				vertex_buffer[vertCount * 6 + 2] = z + cubeVerts[vert][2];
-				vertex_buffer[vertCount * 6 + 3] = uvCoords[v][0];
-				vertex_buffer[vertCount * 6 + 4] = uvCoords[v][1];
-				vertex_buffer[vertCount * 6 + 5] = 0.;
-				// vertex_buffer[vertCount * 6 + 3] = color[0];
-				// vertex_buffer[vertCount * 6 + 4] = color[1];
-				// vertex_buffer[vertCount * 6 + 5] = color[2];
+				vertices[numVertices * 6 + 0] = x + cubeVerts[vert][0];
+				vertices[numVertices * 6 + 1] = y + cubeVerts[vert][1];
+				vertices[numVertices * 6 + 2] = z + cubeVerts[vert][2];
+				vertices[numVertices * 6 + 3] = uvCoords[v][0];
+				vertices[numVertices * 6 + 4] = uvCoords[v][1];
+				vertices[numVertices * 6 + 5] = 0.;
+				// vertices[numVertices * 6 + 3] = color[0];
+				// vertices[numVertices * 6 + 4] = color[1];
+				// vertices[numVertices * 6 + 5] = color[2];
 	
-				vertCount++;
+				numVertices++;
 			}
 		
 			for(let i = 0; i < 6; i++) {
 				const ind = inds[i];
 	
-				index_buffer[indCount] = vertCountBefore + ind;
+				indices[numIndices] = vertCountBefore + ind;
 	
-				indCount++;
+				numIndices++;
 			}
 		}
+
+		return [numVertices, numIndices];
 	};
 
-	for(const chunk of game.chunks) {
+	// for(const chunk of game.chunks) {
+	for(const [chunkPos, chunk] of Object.entries(game.chunks)) {
+		// if(!chunk.cubesChanged)
+		// 	continue;
+		
 		const blocks = chunk.blocks;
+
+		chunk.mesh.numVertices=0;
+		chunk.mesh.numIndices=0;
+		
 		for(let y = 0; y < chunk.height; y++) {
 			for(let z = 0; z < chunk.depth; z++) {
 				for(let x = 0; x < chunk.width; x++) {
@@ -432,10 +462,18 @@ function loop() {
 						}
 
 
-						emitCube(
+						const [vertCount, indCount] = emitCube(
 							chunk.x * chunk.width + x,
 							chunk.y * chunk.height + y,
-							chunk.z * chunk.depth + z, cull);
+							chunk.z * chunk.depth + z,
+							cull,
+							chunk.mesh.vertices,
+							chunk.mesh.indices,
+							chunk.mesh.numVertices,
+							chunk.mesh.numIndices
+							);
+						chunk.mesh.numVertices=vertCount;
+						chunk.mesh.numIndices=indCount;
 					}
 				}
 			}
@@ -447,16 +485,20 @@ function loop() {
 	// emitCube(0, 1, 0);
 	// emitCube(-1, -1, 0);
 
-	const NUM_VERTS = vertCount;
-	const NUM_INDS = indCount;
-
 	gl.bindBuffer(gl.ARRAY_BUFFER, shaderPositionBuffer);
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, shaderIndexBuffer);
 
-	gl.bufferData(gl.ARRAY_BUFFER, vertex_buffer, gl.DYNAMIC_DRAW, 0, NUM_VERTS * 6);
-	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, index_buffer, gl.DYNAMIC_DRAW, 0, NUM_INDS);
+	for(const [chunkPos, chunk] of Object.entries(game.chunks)) {
+		gl.bufferData(gl.ARRAY_BUFFER, chunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numVertices * 6);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, chunk.mesh.indices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numIndices);
 
-	gl.drawElements(gl.TRIANGLES, NUM_INDS, gl.UNSIGNED_SHORT, 0);
+		gl.drawElements(gl.TRIANGLES, chunk.mesh.numIndices, gl.UNSIGNED_SHORT, 0);
+	}
+
+	// gl.bufferData(gl.ARRAY_BUFFER, vertex_buffer, gl.DYNAMIC_DRAW, 0, NUM_VERTS * 6);
+	// gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, index_buffer, gl.DYNAMIC_DRAW, 0, NUM_INDS);
+
+	// gl.drawElements(gl.TRIANGLES, NUM_INDS, gl.UNSIGNED_SHORT, 0);
 
 
 	requestAnimationFrame(loop);
