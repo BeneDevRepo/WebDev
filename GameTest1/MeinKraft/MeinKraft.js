@@ -199,22 +199,47 @@ window.onload = function onload() {
 		return blocks;
 	};
 
-	const create_chunk = (x, y, z) => {
+	const create_subchunk = (x, y, z) => {
 		const blocks = create_blocks(x, y, z);
 
 		const MAX_VERTICES = CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * 4;
 		const MAX_INDICES = CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * 6;
-		
+
 		return {
 			"x": x, "y": y, "z": z,
 			width: CHUNK_WIDTH, height: CHUNK_HEIGHT, depth: CHUNK_DEPTH,
 			"blocks": blocks,
+
 			mesh: {
 				vertices: new Float32Array(MAX_VERTICES * 6),
 				indices: new Int16Array(MAX_INDICES),
 				numVertices: 0, numIndices: 0,
 				cubesChanged: true, meshChanged: false,
 			},
+		}
+	}
+
+	const create_chunk = (x, z) => {
+		// return create_subchunk(x, 0, z);
+		let subchunks = makeArray(16);
+		for(let i = 0; i < 16; i++) {
+			subchunks[i] = create_subchunk(x, i, z);
+		}
+
+		const MAX_VERTICES = CHUNK_WIDTH * CHUNK_HEIGHT*16 * CHUNK_DEPTH * 4;
+		const MAX_INDICES = CHUNK_WIDTH * CHUNK_HEIGHT*16 * CHUNK_DEPTH * 6;
+
+		return {
+			"x": x, "y": 0, "z": z,
+			width: CHUNK_WIDTH, height: CHUNK_HEIGHT*16, depth: CHUNK_DEPTH,
+			"subchunks": subchunks,
+
+			mesh: {
+				vertices: new Float32Array(MAX_VERTICES * 6),
+				indices: new Int16Array(MAX_INDICES),
+				numVertices: 0, numIndices: 0,
+				cubesChanged: true, meshChanged: false,
+			}
 		};
 	};
 
@@ -229,11 +254,23 @@ window.onload = function onload() {
 	// game.chunks.push(create_chunk(0, 0, 0));
 	// game.chunks.push(create_chunk(1, 0, 0));
 
-	game.chunks[[-1, 0, 0]] = create_chunk(-1, 0, 0);
-	game.chunks[[0, 0, 0]] = create_chunk(0, 0, 0);
-	game.chunks[(1, 0, 0)] = create_chunk(1, 0, 0);
+	// game.chunks[[-1, 0, 0]] = create_chunk(-1, 0, 0);
+	// game.chunks[[0, 0, 0]] = create_chunk(0, 0, 0);
+	// game.chunks[[1, 0, 0]] = create_chunk(1, 0, 0);
+	game.chunks[[-1, 0, 0]] = create_chunk(-1, 0);
+	game.chunks[[0, 0, 0]] = create_chunk(0, 0);
+	game.chunks[[1, 0, 0]] = create_chunk(1, 0);
 
 	console.log(game.chunks);
+
+	// setInterval(() => {
+	// 	let chunk = game.chunks[[0, 0, 0]];
+	// 	chunk.blocks[0][7][0] = 
+	// 		chunk.blocks[0][7][0] == BlockType.AIR
+	// 		? BlockType.DIRT
+	// 		: BlockType.AIR;
+	// 	chunk.mesh.cubesChanged = true;
+	// }, 500);
 
 	
 	requestAnimationFrame(loop);
@@ -433,49 +470,57 @@ function loop() {
 	};
 
 	// for(const chunk of game.chunks) {
-	for(const [chunkPos, chunk] of Object.entries(game.chunks)) {
-		if(!chunk.mesh.cubesChanged)
-			continue;
+	for(let [chunkPos, chunk] of Object.entries(game.chunks)) {
+		// if(!chunk.mesh.cubesChanged)
+		// 	continue;
 
-		chunk.mesh.cubesChanged = false;
-		
-		const blocks = chunk.blocks;
+		// chunk.mesh.cubesChanged = false;
 
-		chunk.mesh.numVertices=0;
-		chunk.mesh.numIndices=0;
-		
-		for(let y = 0; y < chunk.height; y++) {
-			for(let z = 0; z < chunk.depth; z++) {
-				for(let x = 0; x < chunk.width; x++) {
-					if(blocks[x][y][z] != BlockType.AIR) {
-						let cull = {};
-						for(let dim = 0; dim < 3; dim++) {
-							const pos = [x, y, z];
-							const size = [chunk.width, chunk.height, chunk.depth];
-							let posMin = [x, y, z]; posMin[dim]--;
-							let posMax = [x, y, z]; posMax[dim]++;
+		for(let subchunk of chunk.subchunks) {
+			if(!subchunk.mesh.cubesChanged)
+				continue;
+		// { let subchunk = chunk;
 
-							if(pos[dim] > 0)
-								if(blocks[posMin[0]][posMin[1]][posMin[2]] != BlockType.AIR)
-									cull[dim * 2] = true;
-							if(pos[dim] < size[dim]-1)
-								if(blocks[posMax[0]][posMax[1]][posMax[2]] != BlockType.AIR)
-									cull[dim * 2 + 1] = true;
+			subchunk.mesh.cubesChanged = false;
+			
+			const blocks = subchunk.blocks;
+
+			subchunk.mesh.numVertices=0;
+			subchunk.mesh.numIndices=0;
+			
+			for(let y = 0; y < subchunk.height; y++) {
+				for(let z = 0; z < subchunk.depth; z++) {
+					for(let x = 0; x < subchunk.width; x++) {
+						if(blocks[x][y][z] != BlockType.AIR) {
+							let cull = {};
+							for(let dim = 0; dim < 3; dim++) {
+								const pos = [x, y, z];
+								const size = [subchunk.width, subchunk.height, subchunk.depth];
+								let posMin = [x, y, z]; posMin[dim]--;
+								let posMax = [x, y, z]; posMax[dim]++;
+
+								if(pos[dim] > 0)
+									if(blocks[posMin[0]][posMin[1]][posMin[2]] != BlockType.AIR)
+										cull[dim * 2] = true;
+								if(pos[dim] < size[dim]-1)
+									if(blocks[posMax[0]][posMax[1]][posMax[2]] != BlockType.AIR)
+										cull[dim * 2 + 1] = true;
+							}
+
+
+							const [vertCount, indCount] = emitCube(
+								subchunk.x * subchunk.width + x,
+								subchunk.y * subchunk.height + y,
+								subchunk.z * subchunk.depth + z,
+								cull,
+								subchunk.mesh.vertices,
+								subchunk.mesh.indices,
+								subchunk.mesh.numVertices,
+								subchunk.mesh.numIndices
+								);
+							subchunk.mesh.numVertices=vertCount;
+							subchunk.mesh.numIndices=indCount;
 						}
-
-
-						const [vertCount, indCount] = emitCube(
-							chunk.x * chunk.width + x,
-							chunk.y * chunk.height + y,
-							chunk.z * chunk.depth + z,
-							cull,
-							chunk.mesh.vertices,
-							chunk.mesh.indices,
-							chunk.mesh.numVertices,
-							chunk.mesh.numIndices
-							);
-						chunk.mesh.numVertices=vertCount;
-						chunk.mesh.numIndices=indCount;
 					}
 				}
 			}
@@ -491,10 +536,19 @@ function loop() {
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, shaderIndexBuffer);
 	
 	for(const [chunkPos, chunk] of Object.entries(game.chunks)) {
-		gl.bufferData(gl.ARRAY_BUFFER, chunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numVertices * 6);
-		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, chunk.mesh.indices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numIndices);
+		if(!chunk.mesh.cubesChanged) {
+			gl.bufferData(gl.ARRAY_BUFFER, chunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numVertices * 6);
+			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, chunk.mesh.indices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numIndices);
+			
+			gl.drawElements(gl.TRIANGLES, chunk.mesh.numIndices, gl.UNSIGNED_SHORT, 0);
+		} else {
+			for(const subchunk of chunk.subchunks) {
+				gl.bufferData(gl.ARRAY_BUFFER, subchunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, subchunk.mesh.numVertices * 6);
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, subchunk.mesh.indices, gl.DYNAMIC_DRAW, 0, subchunk.mesh.numIndices);
 
-		gl.drawElements(gl.TRIANGLES, chunk.mesh.numIndices, gl.UNSIGNED_SHORT, 0);
+				gl.drawElements(gl.TRIANGLES, subchunk.mesh.numIndices, gl.UNSIGNED_SHORT, 0);
+			}
+		}
 	}
 
 	// gl.bufferData(gl.ARRAY_BUFFER, vertex_buffer, gl.DYNAMIC_DRAW, 0, NUM_VERTS * 6);
