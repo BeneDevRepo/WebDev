@@ -1,0 +1,46 @@
+
+form {
+	/* display: grid;
+	grid-template-columns: 1fr, 1fr; */
+	display: flex;
+	flex-direction: column;
+	width: fit-content;
+
+	padding: 10px;
+	margin: 10px;
+	border-radius: 10px;
+
+	background-color: rgb(133, 133, 133);
+}
+
+h1 {
+	font-size: 1.5em;
+	margin: 0px;
+}
+
+h1 b {
+	text-decoration: underline;
+}
+
+.formfield {
+	display: flex;
+	flex-direction: row;
+	padding-bottom: 5px;
+}
+
+
+label {
+	display: flex;
+	min-width: 10em;
+	grid-column-start: 0;
+}
+
+.submit {
+	width: 50%;
+}
+
+/* input, textarea {
+	display: flex;
+	width: 100%;
+	grid-column-start: 1;
+} */
