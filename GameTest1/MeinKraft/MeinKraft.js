@@ -1,6 +1,15 @@
 import * as webgl from './WebGL.js';
 import * as mat4 from './glMatrix/mat4.js';
 import * as vec3 from './glMatrix/vec3.js';
+import * as worldgen from './WorldGen.js';
+
+import {
+	BlockType,
+	CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH,
+	SUB_CHUNK_WIDTH, SUB_CHUNK_HEIGHT, SUB_CHUNK_DEPTH,
+	makeArray
+} from './general.js';
+
 
 const vert = x => x;
 const frag = x => x;
@@ -9,24 +18,19 @@ Number.prototype.clamp = function(min, max) {
 	return Math.min(Math.max(this, min), max);
 };
 
-const BlockType = Object.freeze({
-	AIR: "Air",
-	STONE: "Stone",
-	DIRT: "Dirt",
-	GRASS: "Grass",
-});
-
 
 let canvas;
 let gl;
 
 let shaderProgram;
 
-let shaderPositionBuffer;
+// let shaderPositionBuffer; // VBO
 let shaderPositionAttributeLocation;
 
-let shaderIndexBuffer;
+// let shaderIndexBuffer; // IBO / EBO
 let shaderColorAttributeLocation;
+
+// let VAO;
 
 let texture;
 
@@ -34,12 +38,11 @@ let mvpUniformLocation;
 let textureUniformLocation;
 
 
-const MAX_VERTICES = 1024 * 1024;
-let vertex_buffer = new Float32Array(MAX_VERTICES * 6);
+// const MAX_VERTICES = 1024 * 1024;
+// let vertex_buffer = new Float32Array(MAX_VERTICES * 6);
 
-const MAX_TRIANGLES = 1024 * 1024;
-let index_buffer = new Int16Array(MAX_TRIANGLES * 3);
-
+// const MAX_TRIANGLES = 1024 * 1024;
+// let index_buffer = new Int16Array(MAX_TRIANGLES * 3);
 
 let game = {
 	keys: {
@@ -49,7 +52,7 @@ let game = {
 		"d": false,
 	},
 	player: {
-		pos: vec3.fromValues(4, 0, 10),
+		pos: vec3.fromValues(4, 30, 30),
 		eye: vec3.fromValues(0, 1.8, 0),
 		rx: 0., // rotation around x axis (-90 ... 90)
 		ry: 0., // rotation around y axis (0 ... 360)
@@ -69,6 +72,14 @@ window.onload = function onload() {
 	canvas = document.getElementById("mainCanvas");
 	gl = webgl.getContext(canvas);
 
+	let worker = new Worker("MeshGen.js");
+	worker.onmessage = (e) => {
+		// console.log("Event:");
+		// console.log(e.data);
+	}
+
+	worker.postMessage({a: 8, b: [7, 6]});
+
 	const vertexSource = vert`\
 		#version 300 es
 		precision highp float;
@@ -82,7 +93,6 @@ window.onload = function onload() {
 
 		void main() {
 			color = a_color;
-			// gl_Position = vec4(a_position, 1.);
 			gl_Position = u_mvp * vec4(a_position, 1.);
 		}
 		`;
@@ -107,8 +117,9 @@ window.onload = function onload() {
 
 	shaderPositionAttributeLocation = gl.getAttribLocation(shaderProgram, 'a_position');
 	shaderColorAttributeLocation = gl.getAttribLocation(shaderProgram, 'a_color');
-	shaderPositionBuffer = gl.createBuffer();
-	shaderIndexBuffer = gl.createBuffer();
+	// shaderPositionBuffer = gl.createBuffer();
+	// shaderIndexBuffer = gl.createBuffer();
+	// VAO = gl.createVertexArray(); // vertex attribute array
 
 	mvpUniformLocation = gl.getUniformLocation(shaderProgram, "u_mvp");
 	textureUniformLocation = gl.getUniformLocation(shaderProgram, "u_texture");
@@ -119,15 +130,19 @@ window.onload = function onload() {
 
 	texture = webgl.loadTexture(gl, "rick.jpg");
 
+	// VAO = gl.createVertexArray(); // vertex attribute array
+	// shaderPositionBuffer = gl.createBuffer();
+	// shaderIndexBuffer = gl.createBuffer();
 
-	// tell the shader to load our data from the buffer we just made:
-	gl.enableVertexAttribArray(shaderPositionAttributeLocation);
-	gl.enableVertexAttribArray(shaderColorAttributeLocation);
-
-	gl.bindBuffer(gl.ARRAY_BUFFER, shaderPositionBuffer);
-	// gl.bindBuffer(gl.INDEX_BUFFER, shaderIndexBuffer);
-	gl.vertexAttribPointer(shaderPositionAttributeLocation, 3, gl.FLOAT, false, 6 * 4, 0); // 3-dim floats, don't normalize, stride between points, initial offset
-	gl.vertexAttribPointer(shaderColorAttributeLocation, 3, gl.FLOAT, false, 6 * 4, 3 * 4); // 3-dim floats, don't normalize, stride between points, initial offset
+	
+	// gl.bindVertexArray(VAO);
+	// gl.bindBuffer(gl.ARRAY_BUFFER, shaderPositionBuffer);
+	// gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, shaderIndexBuffer);
+	// gl.enableVertexAttribArray(shaderPositionAttributeLocation);
+	// gl.enableVertexAttribArray(shaderColorAttributeLocation);
+	// gl.vertexAttribPointer(shaderPositionAttributeLocation, 3, gl.FLOAT, false, 6 * 4, 0); // 3-dim floats, don't normalize, stride between points, initial offset
+	// gl.vertexAttribPointer(shaderColorAttributeLocation, 3, gl.FLOAT, false, 6 * 4, 3 * 4); // 3-dim floats, don't normalize, stride between points, initial offset
+	// gl.bindVertexArray(null);
 	
 	gl.enable(gl.BLEND);
 	gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -176,99 +191,111 @@ window.onload = function onload() {
 	gl.enable(gl.DEPTH_TEST);
 	gl.depthFunc(gl.LEQUAL);
 
-	const CHUNK_SIZE = 8;
-	const CHUNK_WIDTH = CHUNK_SIZE;
-	const CHUNK_HEIGHT = CHUNK_SIZE;
-	const CHUNK_DEPTH = CHUNK_SIZE;
-
-	const create_blocks = (x, y, z) => {
-		let blocks = makeArray(CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH); // [x][y][z]
-		for(let x = 0; x < CHUNK_WIDTH; x++) {
-			for(let y = 0; y < CHUNK_HEIGHT; y++) {
-				for(let z = 0; z < CHUNK_DEPTH; z++) {
-					blocks[x][y][z] = 
-						// (Math.floor(Math.floor(x/2)+Math.floor(y/2)+Math.floor(z/2)) % 2 == 0)
-						// (y >= 2) && (Math.floor(x+y+z) % 2 == 0)
-						// (Math.floor(x+y+z) % 2 == 0)
-						false
-						? BlockType.AIR
-						: BlockType.STONE;
-				}
-			}
-		}
-		return blocks;
-	};
 
 	const create_subchunk = (x, y, z) => {
-		const blocks = create_blocks(x, y, z);
+		// const blocks = create_blocks(x, y, z);
+		const blocks = worldgen.generateSubchunk(x, y, z);
 
-		const MAX_VERTICES = CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * 4;
-		const MAX_INDICES = CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * 6;
+		// const MAX_VERTICES = SUB_CHUNK_WIDTH * SUB_CHUNK_HEIGHT * SUB_CHUNK_DEPTH * 4   * 10; // 163.840
+		// const MAX_INDICES = SUB_CHUNK_WIDTH * SUB_CHUNK_HEIGHT * SUB_CHUNK_DEPTH * 6    * 10; // 245.760
+		const MAX_VERTICES = SUB_CHUNK_WIDTH * SUB_CHUNK_HEIGHT * SUB_CHUNK_DEPTH * 4 * 3; // 163.840
+		const MAX_INDICES = SUB_CHUNK_WIDTH * SUB_CHUNK_HEIGHT * SUB_CHUNK_DEPTH * 6 * 3; // 245.760
+
+		const VAO = gl.createVertexArray(); // vertex attribute array
+		const VBO = gl.createBuffer();
+		const EBO = gl.createBuffer();
+
+		gl.bindVertexArray(VAO);
+		gl.bindBuffer(gl.ARRAY_BUFFER, VBO);
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO);
+		gl.vertexAttribPointer(shaderPositionAttributeLocation, 3, gl.FLOAT, false, 6 * 4, 0); // 3-dim floats, don't normalize, stride between points, initial offset
+		gl.vertexAttribPointer(shaderColorAttributeLocation, 3, gl.FLOAT, false, 6 * 4, 3 * 4); // 3-dim floats, don't normalize, stride between points, initial offset
+		gl.enableVertexAttribArray(shaderPositionAttributeLocation);
+		gl.enableVertexAttribArray(shaderColorAttributeLocation);
+		gl.bindVertexArray(null);
+
+		// const empty = blocks == null;
 
 		return {
 			"x": x, "y": y, "z": z,
-			width: CHUNK_WIDTH, height: CHUNK_HEIGHT, depth: CHUNK_DEPTH,
+			width: SUB_CHUNK_WIDTH, height: SUB_CHUNK_HEIGHT, depth: SUB_CHUNK_DEPTH,
 			"blocks": blocks,
 
 			mesh: {
+				// CPU:
 				vertices: new Float32Array(MAX_VERTICES * 6),
-				indices: new Int16Array(MAX_INDICES),
+				indices: new Int32Array(MAX_INDICES),
+				// vertices: empty ? null : new Float32Array(MAX_VERTICES * 6),
+				// indices: empty ? null : new Int32Array(MAX_INDICES),
 				numVertices: 0, numIndices: 0,
-				cubesChanged: true, meshChanged: false,
+				cubesChanged: true,
+
+				// GPU:
+				"VAO": VAO, "VBO": VBO, "EBO": EBO,
+				meshChanged: false,
 			},
 		}
 	}
 
 	const create_chunk = (x, z) => {
+		const NUM_VERTICAL_SUBCHUNKS = 16;
 		// return create_subchunk(x, 0, z);
-		let subchunks = makeArray(16);
-		for(let i = 0; i < 16; i++) {
+		let subchunks = makeArray(NUM_VERTICAL_SUBCHUNKS);
+		for(let i = 0; i < subchunks.length; i++) {
 			subchunks[i] = create_subchunk(x, i, z);
 		}
 
-		const MAX_VERTICES = CHUNK_WIDTH * CHUNK_HEIGHT*16 * CHUNK_DEPTH * 4;
-		const MAX_INDICES = CHUNK_WIDTH * CHUNK_HEIGHT*16 * CHUNK_DEPTH * 6;
+		const VAO = gl.createVertexArray(); // vertex attribute array
+		const VBO = gl.createBuffer();
+		const EBO = gl.createBuffer();
+
+		gl.bindVertexArray(VAO);
+		gl.bindBuffer(gl.ARRAY_BUFFER, VBO);
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO);
+		gl.vertexAttribPointer(shaderPositionAttributeLocation, 3, gl.FLOAT, false, 6 * 4, 0); // 3-dim floats, don't normalize, stride between points, initial offset
+		gl.vertexAttribPointer(shaderColorAttributeLocation, 3, gl.FLOAT, false, 6 * 4, 3 * 4); // 3-dim floats, don't normalize, stride between points, initial offset
+		gl.enableVertexAttribArray(shaderPositionAttributeLocation);
+		gl.enableVertexAttribArray(shaderColorAttributeLocation);
+		gl.bindVertexArray(null);
 
 		return {
 			"x": x, "y": 0, "z": z,
-			width: CHUNK_WIDTH, height: CHUNK_HEIGHT*16, depth: CHUNK_DEPTH,
+			width: CHUNK_WIDTH, height: CHUNK_HEIGHT, depth: CHUNK_DEPTH,
 			"subchunks": subchunks,
 
 			mesh: {
-				vertices: new Float32Array(MAX_VERTICES * 6),
-				indices: new Int16Array(MAX_INDICES),
+				// CPU:
+				vertices: new Float32Array(subchunks[0].mesh.vertices.length * subchunks.length),
+				indices: new Int32Array(subchunks[0].mesh.indices.length * subchunks.length),
 				numVertices: 0, numIndices: 0,
-				cubesChanged: true, meshChanged: false,
+				cubesChanged: true,
+
+				// GPU:
+				"VAO": VAO, "VBO": VBO, "EBO": EBO,
+				meshChanged: false,
 			}
 		};
 	};
 
 	game.chunks = {};
 
+	// game.chunks[[-1, 0]] = create_chunk(-1, 0);
+	// game.chunks[[0, 0]] = create_chunk(0, 0);
+	// game.chunks[[1, 0]] = create_chunk(1, 0);
+	for(let x = 0; x < 8; x++)
+		for(let z = 0; z < 8; z++)
+			game.chunks[[x, z]] = create_chunk(x, z);
 
-	// game.chunks.push(create_chunk(0, 3, 0));
-	// game.chunks.push(create_chunk(0, 2, 0));
-	// game.chunks.push(create_chunk(0, 1, 0));
-
-	// game.chunks.push(create_chunk(-1, 0, 0));
-	// game.chunks.push(create_chunk(0, 0, 0));
-	// game.chunks.push(create_chunk(1, 0, 0));
-
-	// game.chunks[[-1, 0, 0]] = create_chunk(-1, 0, 0);
-	// game.chunks[[0, 0, 0]] = create_chunk(0, 0, 0);
-	// game.chunks[[1, 0, 0]] = create_chunk(1, 0, 0);
-	game.chunks[[-1, 0, 0]] = create_chunk(-1, 0);
-	game.chunks[[0, 0, 0]] = create_chunk(0, 0);
-	game.chunks[[1, 0, 0]] = create_chunk(1, 0);
-
-	console.log(game.chunks);
+	// console.log(game.chunks);
 
 	// setInterval(() => {
-	// 	let chunk = game.chunks[[0, 0, 0]];
-	// 	chunk.blocks[0][7][0] = 
-	// 		chunk.blocks[0][7][0] == BlockType.AIR
-	// 		? BlockType.DIRT
-	// 		: BlockType.AIR;
+	// 	let chunk = game.chunks[[0, 0]];
+	// 	let subchunk = chunk.subchunks[0];
+	// 	let block = subchunk.blocks[0][0][0] != BlockType.AIR
+	// 	for(let x = 0; x < 16; x++)
+	// 		for(let z = 0; z < 16; z++)
+	// 			subchunk.blocks[x][0][z] = block ? BlockType.AIR : BlockType.DIRT;
+	// 	subchunk.mesh.cubesChanged = true;
 	// 	chunk.mesh.cubesChanged = true;
 	// }, 500);
 
@@ -471,17 +498,15 @@ function loop() {
 
 	// for(const chunk of game.chunks) {
 	for(let [chunkPos, chunk] of Object.entries(game.chunks)) {
-		// if(!chunk.mesh.cubesChanged)
-		// 	continue;
-
-		// chunk.mesh.cubesChanged = false;
+		if(!chunk.mesh.cubesChanged)
+			continue;
 
 		for(let subchunk of chunk.subchunks) {
 			if(!subchunk.mesh.cubesChanged)
 				continue;
-		// { let subchunk = chunk;
 
 			subchunk.mesh.cubesChanged = false;
+			subchunk.mesh.meshChanged = true;
 			
 			const blocks = subchunk.blocks;
 
@@ -507,7 +532,6 @@ function loop() {
 										cull[dim * 2 + 1] = true;
 							}
 
-
 							const [vertCount, indCount] = emitCube(
 								subchunk.x * subchunk.width + x,
 								subchunk.y * subchunk.height + y,
@@ -525,6 +549,28 @@ function loop() {
 				}
 			}
 		}
+
+		chunk.mesh.numVertices = 0;
+		chunk.mesh.numIndices = 0;
+		for(const subchunk of chunk.subchunks) {
+			// const numVerticesBefore = chunk.mesh.numVertices;
+
+			for(let vert = 0; vert < subchunk.mesh.numVertices * 6; vert++) {
+				chunk.mesh.vertices[chunk.mesh.numVertices * 6 + vert] =
+					subchunk.mesh.vertices[vert];
+			}
+
+			for(let ind = 0; ind < subchunk.mesh.numIndices; ind++) {
+				chunk.mesh.indices[chunk.mesh.numIndices + ind] =
+					chunk.mesh.numVertices + subchunk.mesh.indices[ind];
+			}
+
+			chunk.mesh.numVertices += subchunk.mesh.numVertices;
+			chunk.mesh.numIndices += subchunk.mesh.numIndices;
+		}
+
+		chunk.mesh.cubesChanged = false;
+		chunk.mesh.meshChanged = true;
 	}
 
 	// emitCube(0, 0, 0);
@@ -532,21 +578,43 @@ function loop() {
 	// emitCube(0, 1, 0);
 	// emitCube(-1, -1, 0);
 
-	gl.bindBuffer(gl.ARRAY_BUFFER, shaderPositionBuffer);
-	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, shaderIndexBuffer);
-	
+	// gl.bindVertexArray(VAO);
+
+	// gl.bindBuffer(gl.ARRAY_BUFFER, shaderPositionBuffer);
+	// gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, shaderIndexBuffer);
+
 	for(const [chunkPos, chunk] of Object.entries(game.chunks)) {
 		if(!chunk.mesh.cubesChanged) {
-			gl.bufferData(gl.ARRAY_BUFFER, chunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numVertices * 6);
-			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, chunk.mesh.indices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numIndices);
+			gl.bindVertexArray(chunk.mesh.VAO);
+				
+			if(chunk.mesh.meshChanged) {
+				chunk.mesh.meshChanged = false;
+				gl.bindBuffer(gl.ARRAY_BUFFER, chunk.mesh.VBO);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, chunk.mesh.EBO);
+
+				gl.bufferData(gl.ARRAY_BUFFER, chunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numVertices * 6);
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, chunk.mesh.indices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numIndices);
+			}
+
+			gl.drawElements(gl.TRIANGLES, chunk.mesh.numIndices, gl.UNSIGNED_INT, 0);
+			// gl.bufferData(gl.ARRAY_BUFFER, chunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numVertices * 6);
+			// gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, chunk.mesh.indices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numIndices);
 			
-			gl.drawElements(gl.TRIANGLES, chunk.mesh.numIndices, gl.UNSIGNED_SHORT, 0);
+			// gl.drawElements(gl.TRIANGLES, chunk.mesh.numIndices, gl.UNSIGNED_INT, 0);
 		} else {
 			for(const subchunk of chunk.subchunks) {
-				gl.bufferData(gl.ARRAY_BUFFER, subchunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, subchunk.mesh.numVertices * 6);
-				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, subchunk.mesh.indices, gl.DYNAMIC_DRAW, 0, subchunk.mesh.numIndices);
+				gl.bindVertexArray(subchunk.mesh.VAO);
+				
+				if(subchunk.mesh.meshChanged) {
+					subchunk.mesh.meshChanged = false;
+					gl.bindBuffer(gl.ARRAY_BUFFER, subchunk.mesh.VBO);
+					gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, subchunk.mesh.EBO);
 
-				gl.drawElements(gl.TRIANGLES, subchunk.mesh.numIndices, gl.UNSIGNED_SHORT, 0);
+					gl.bufferData(gl.ARRAY_BUFFER, subchunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, subchunk.mesh.numVertices * 6);
+					gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, subchunk.mesh.indices, gl.DYNAMIC_DRAW, 0, subchunk.mesh.numIndices);
+				}
+
+				gl.drawElements(gl.TRIANGLES, subchunk.mesh.numIndices, gl.UNSIGNED_INT, 0);
 			}
 		}
 	}
@@ -558,16 +626,4 @@ function loop() {
 
 
 	requestAnimationFrame(loop);
-}
-
-
-function makeArray(...dimensions) {
-	if(dimensions.length == 1)
-		return new Array(dimensions[0]);
-
-	let arr = new Array(dimensions[0]);
-	for(let i = 0; i < arr.length; i++)
-		arr[i] = makeArray(...dimensions.slice(1));
-
-	return arr;
 }
