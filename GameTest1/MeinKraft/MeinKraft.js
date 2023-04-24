@@ -19,6 +19,17 @@ Number.prototype.clamp = function(min, max) {
 };
 
 
+const MAX_VERTICES_SUBCHUNK = SUB_CHUNK_WIDTH * SUB_CHUNK_HEIGHT * SUB_CHUNK_DEPTH * 4 * 3; // 163.840
+const MAX_INDICES_SUBCHUNK = SUB_CHUNK_WIDTH * SUB_CHUNK_HEIGHT * SUB_CHUNK_DEPTH * 6 * 3; // 245.760
+
+
+const NUM_VERTICAL_SUBCHUNKS = 16;
+const MAX_VERTICES_CHUNK = MAX_VERTICES_SUBCHUNK * NUM_VERTICAL_SUBCHUNKS;
+const MAX_INDICES_CHUNK  = MAX_INDICES_SUBCHUNK  * NUM_VERTICAL_SUBCHUNKS;
+
+
+
+
 let canvas;
 let gl;
 
@@ -36,6 +47,8 @@ let texture;
 
 let mvpUniformLocation;
 let textureUniformLocation;
+
+let meshStitcherWorker;
 
 
 // const MAX_VERTICES = 1024 * 1024;
@@ -72,13 +85,7 @@ window.onload = function onload() {
 	canvas = document.getElementById("mainCanvas");
 	gl = webgl.getContext(canvas);
 
-	let worker = new Worker("MeshGen.js");
-	worker.onmessage = (e) => {
-		// console.log("Event:");
-		// console.log(e.data);
-	}
-
-	worker.postMessage({a: 8, b: [7, 6]});
+	// worker.postMessage({a: 8, b: [7, 6]});
 
 	const vertexSource = vert`\
 		#version 300 es
@@ -129,20 +136,6 @@ window.onload = function onload() {
 	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 
 	texture = webgl.loadTexture(gl, "rick.jpg");
-
-	// VAO = gl.createVertexArray(); // vertex attribute array
-	// shaderPositionBuffer = gl.createBuffer();
-	// shaderIndexBuffer = gl.createBuffer();
-
-	
-	// gl.bindVertexArray(VAO);
-	// gl.bindBuffer(gl.ARRAY_BUFFER, shaderPositionBuffer);
-	// gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, shaderIndexBuffer);
-	// gl.enableVertexAttribArray(shaderPositionAttributeLocation);
-	// gl.enableVertexAttribArray(shaderColorAttributeLocation);
-	// gl.vertexAttribPointer(shaderPositionAttributeLocation, 3, gl.FLOAT, false, 6 * 4, 0); // 3-dim floats, don't normalize, stride between points, initial offset
-	// gl.vertexAttribPointer(shaderColorAttributeLocation, 3, gl.FLOAT, false, 6 * 4, 3 * 4); // 3-dim floats, don't normalize, stride between points, initial offset
-	// gl.bindVertexArray(null);
 	
 	gl.enable(gl.BLEND);
 	gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -150,14 +143,6 @@ window.onload = function onload() {
 	
 	document.onkeydown = keyDown;
 	document.onkeyup = keyUp;
-
-	document.addEventListener(
-		'beforeunload',
-		function(e){
-			e.stopPropagation();e.preventDefault();return false;
-		},
-		true
-	);
 	
 	let capt =
 	() => {
@@ -198,8 +183,6 @@ window.onload = function onload() {
 
 		// const MAX_VERTICES = SUB_CHUNK_WIDTH * SUB_CHUNK_HEIGHT * SUB_CHUNK_DEPTH * 4   * 10; // 163.840
 		// const MAX_INDICES = SUB_CHUNK_WIDTH * SUB_CHUNK_HEIGHT * SUB_CHUNK_DEPTH * 6    * 10; // 245.760
-		const MAX_VERTICES = SUB_CHUNK_WIDTH * SUB_CHUNK_HEIGHT * SUB_CHUNK_DEPTH * 4 * 3; // 163.840
-		const MAX_INDICES = SUB_CHUNK_WIDTH * SUB_CHUNK_HEIGHT * SUB_CHUNK_DEPTH * 6 * 3; // 245.760
 
 		const VAO = gl.createVertexArray(); // vertex attribute array
 		const VBO = gl.createBuffer();
@@ -223,8 +206,8 @@ window.onload = function onload() {
 
 			mesh: {
 				// CPU:
-				vertices: new Float32Array(MAX_VERTICES * 6),
-				indices: new Int32Array(MAX_INDICES),
+				vertices: new Float32Array(MAX_VERTICES_SUBCHUNK * 6),
+				indices: new Int32Array(MAX_INDICES_SUBCHUNK),
 				// vertices: empty ? null : new Float32Array(MAX_VERTICES * 6),
 				// indices: empty ? null : new Int32Array(MAX_INDICES),
 				numVertices: 0, numIndices: 0,
@@ -238,13 +221,13 @@ window.onload = function onload() {
 	}
 
 	const create_chunk = (x, z) => {
-		const NUM_VERTICAL_SUBCHUNKS = 16;
 		// return create_subchunk(x, 0, z);
 		let subchunks = makeArray(NUM_VERTICAL_SUBCHUNKS);
 		for(let i = 0; i < subchunks.length; i++) {
 			subchunks[i] = create_subchunk(x, i, z);
 		}
-
+		
+		
 		const VAO = gl.createVertexArray(); // vertex attribute array
 		const VBO = gl.createBuffer();
 		const EBO = gl.createBuffer();
@@ -265,14 +248,19 @@ window.onload = function onload() {
 
 			mesh: {
 				// CPU:
-				vertices: new Float32Array(subchunks[0].mesh.vertices.length * subchunks.length),
-				indices: new Int32Array(subchunks[0].mesh.indices.length * subchunks.length),
+				vertices: new Float32Array(MAX_VERTICES_CHUNK),
+				indices: new Int32Array(MAX_INDICES_CHUNK),
+				// vertices: new Float32Array(subchunks[0].mesh.vertices.length * subchunks.length),
+				// indices: new Int32Array(subchunks[0].mesh.indices.length * subchunks.length),
 				numVertices: 0, numIndices: 0,
-				cubesChanged: true,
+				cubesChanged: true, // indicates that subchunks should be rebuilt
+
+				subMeshChanged: false, // indicates that chunk mesh should be re-stitched from subchunk meshes
+				working: false, // indicates that chunk mesh is actiively getting rebuilt by a worker
 
 				// GPU:
 				"VAO": VAO, "VBO": VBO, "EBO": EBO,
-				meshChanged: false,
+				meshChanged: false, // indicates that chunk mesh should be re-uploaded to GPU buffers
 			}
 		};
 	};
@@ -282,35 +270,60 @@ window.onload = function onload() {
 	// game.chunks[[-1, 0]] = create_chunk(-1, 0);
 	// game.chunks[[0, 0]] = create_chunk(0, 0);
 	// game.chunks[[1, 0]] = create_chunk(1, 0);
-	for(let x = 0; x < 8; x++)
-		for(let z = 0; z < 8; z++)
+	for(let x = 0; x < 2; x++)
+		for(let z = 0; z < 2; z++)
 			game.chunks[[x, z]] = create_chunk(x, z);
+
+
+	meshStitcherWorker = new Worker("MeshStitcher.js");
+	meshStitcherWorker.onmessage = (e) => {
+		let data = e.data;
+		// let mesh = data.meshOut;
+		let chunk = game.chunks[data.name];
+
+		chunk.mesh.vertices    = data.meshOut.vertices;
+		chunk.mesh.indices     = data.meshOut.indices;
+		chunk.mesh.numVertices = data.meshOut.numVertices;
+		chunk.mesh.numIndices  = data.meshOut.numIndices;
+		
+		for(let i = 0; i < data.meshIn.length; i++) {
+			chunk.subchunks[i].mesh.vertices    = data.meshIn[i].vertices;
+			chunk.subchunks[i].mesh.indices     = data.meshIn[i].indices;
+			chunk.subchunks[i].mesh.numVertices = data.meshIn[i].numVertices;
+			chunk.subchunks[i].mesh.numIndices  = data.meshIn[i].numIndices;
+		}
+
+		// chunk.mesh.meshChanged = true;
+
+		gl.bindVertexArray(chunk.mesh.VAO);
+		gl.bindBuffer(gl.ARRAY_BUFFER, chunk.mesh.VBO);
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, chunk.mesh.EBO);
+		gl.bufferData(gl.ARRAY_BUFFER, chunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numVertices * 6);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, chunk.mesh.indices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numIndices);
+
+		chunk.mesh.subMeshChanged = false;
+		chunk.mesh.working = false;
+		
+		// console.log("Event:");
+		// console.log(e.data);
+		// console.log(game.chunks[[chunk.x, chunk.z]]);
+	}
 
 	// console.log(game.chunks);
 
-	// setInterval(() => {
-	// 	let chunk = game.chunks[[0, 0]];
-	// 	let subchunk = chunk.subchunks[0];
-	// 	let block = subchunk.blocks[0][0][0] != BlockType.AIR
-	// 	for(let x = 0; x < 16; x++)
-	// 		for(let z = 0; z < 16; z++)
-	// 			subchunk.blocks[x][0][z] = block ? BlockType.AIR : BlockType.DIRT;
-	// 	subchunk.mesh.cubesChanged = true;
-	// 	chunk.mesh.cubesChanged = true;
-	// }, 500);
+	setInterval(() => {
+		let chunk = game.chunks[[0, 0]];
+		let subchunk = chunk.subchunks[0];
+		let block = subchunk.blocks[0][0][0] != BlockType.AIR
+		for(let x = 0; x < 16; x++)
+			for(let z = 0; z < 16; z++)
+				subchunk.blocks[x][0][z] = block ? BlockType.AIR : BlockType.DIRT;
+		subchunk.mesh.cubesChanged = true;
+		chunk.mesh.cubesChanged = true;
+	}, 500);
 
-	
 	requestAnimationFrame(loop);
 }
-
-// prevent accidentally closing tab
-// window.onbeforeunload = function (e) {
-//     // Cancel the event
-//     e.preventDefault();
-
-//     // Chrome requires returnValue to be set
-//     e.returnValue = 'Really want to quit the game?';
-// };
 
 function keyDown(event) {
 	game.keys[event.key.toLowerCase()] = true;
@@ -329,7 +342,6 @@ function mouseMove(event) {
 		game.player.rx -= dy * degPerPixel * 3.1415926535 / 180;
 		game.player.ry -= dx * degPerPixel * 3.1415926535 / 180;
 		game.player.rx = game.player.rx.clamp(-3.1414/2, 3.1414/2);
-		// console.log(dx, dy);
 	}
 }
 
@@ -366,14 +378,11 @@ function loop() {
 
 	// vec3.rotateX(vel, vel, vec3.create(), game.player.rx);
 	vec3.rotateY(vel, vel, vec3.create(), game.player.ry);
-	// console.log(vel);
 	vec3.add(game.player.pos, game.player.pos, vel);
 	
 
 
 	// MVP:
-	// let eye = vec3.fromValues(0., 0., 2.);
-	// let eye = vec3.fromValues(Math.abs((prevTime * .03 % 100 * .02) - 1) * 4 - 2, 2., 8);
 	let eye = vec3.create();
 	vec3.add(eye, game.player.pos, game.player.eye);
 	// let target = vec3.fromValues(0., 0., 0.);
@@ -496,10 +505,12 @@ function loop() {
 		return [numVertices, numIndices];
 	};
 
-	// for(const chunk of game.chunks) {
+	
 	for(let [chunkPos, chunk] of Object.entries(game.chunks)) {
 		if(!chunk.mesh.cubesChanged)
-			continue;
+		continue;
+
+		chunk.mesh.subMeshChanged = true;
 
 		for(let subchunk of chunk.subchunks) {
 			if(!subchunk.mesh.cubesChanged)
@@ -548,7 +559,57 @@ function loop() {
 					}
 				}
 			}
+
+			gl.bindVertexArray(subchunk.mesh.VAO);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, subchunk.mesh.VBO);
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, subchunk.mesh.EBO);
+
+			gl.bufferData(gl.ARRAY_BUFFER, subchunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, subchunk.mesh.numVertices * 6);
+			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, subchunk.mesh.indices, gl.DYNAMIC_DRAW, 0, subchunk.mesh.numIndices);
 		}
+	}
+
+	for(let [chunkPos, chunk] of Object.entries(game.chunks)) {
+		if(!chunk.mesh.subMeshChanged)
+			continue;
+
+		if(chunk.mesh.working) // re-stitching already in progress
+			continue;
+
+		let transfer = [];
+		let subMeshes = [];
+		for(const subchunk of chunk.subchunks) {
+			subMeshes.push({
+				vertices:    subchunk.mesh.vertices,
+				indices:     subchunk.mesh.indices,
+				numVertices: subchunk.mesh.numVertices,
+				numIndices:  subchunk.mesh.numIndices,
+			});
+
+			transfer.push(subchunk.mesh.vertices.buffer);
+			transfer.push(subchunk.mesh.indices.buffer);
+		}
+
+		transfer.push(chunk.mesh.vertices.buffer);
+		transfer.push(chunk.mesh.indices.buffer);
+
+		meshStitcherWorker.postMessage({
+			name: [chunk.x, chunk.z],
+			meshIn: subMeshes,
+			meshOut: {
+				vertices: chunk.mesh.vertices,
+				indices: chunk.mesh.indices,
+				numVertices: 0,
+				numIndices: 0,
+			},
+		}, transfer);
+
+		chunk.mesh.cubesChanged = false;
+		chunk.mesh.working = true;
+
+		continue;
+
 
 		chunk.mesh.numVertices = 0;
 		chunk.mesh.numIndices = 0;
@@ -584,35 +645,32 @@ function loop() {
 	// gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, shaderIndexBuffer);
 
 	for(const [chunkPos, chunk] of Object.entries(game.chunks)) {
-		if(!chunk.mesh.cubesChanged) {
+		if(!chunk.mesh.subMeshChanged && !chunk.mesh.working) {
 			gl.bindVertexArray(chunk.mesh.VAO);
 				
-			if(chunk.mesh.meshChanged) {
-				chunk.mesh.meshChanged = false;
-				gl.bindBuffer(gl.ARRAY_BUFFER, chunk.mesh.VBO);
-				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, chunk.mesh.EBO);
+			// if(chunk.mesh.meshChanged) {
+			// 	chunk.mesh.meshChanged = false;
+			// 	gl.bindBuffer(gl.ARRAY_BUFFER, chunk.mesh.VBO);
+			// 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, chunk.mesh.EBO);
 
-				gl.bufferData(gl.ARRAY_BUFFER, chunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numVertices * 6);
-				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, chunk.mesh.indices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numIndices);
-			}
+			// 	gl.bufferData(gl.ARRAY_BUFFER, chunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numVertices * 6);
+			// 	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, chunk.mesh.indices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numIndices);
+			// }
 
 			gl.drawElements(gl.TRIANGLES, chunk.mesh.numIndices, gl.UNSIGNED_INT, 0);
-			// gl.bufferData(gl.ARRAY_BUFFER, chunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numVertices * 6);
-			// gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, chunk.mesh.indices, gl.DYNAMIC_DRAW, 0, chunk.mesh.numIndices);
-			
-			// gl.drawElements(gl.TRIANGLES, chunk.mesh.numIndices, gl.UNSIGNED_INT, 0);
 		} else {
+			// continue;
 			for(const subchunk of chunk.subchunks) {
 				gl.bindVertexArray(subchunk.mesh.VAO);
-				
-				if(subchunk.mesh.meshChanged) {
-					subchunk.mesh.meshChanged = false;
-					gl.bindBuffer(gl.ARRAY_BUFFER, subchunk.mesh.VBO);
-					gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, subchunk.mesh.EBO);
 
-					gl.bufferData(gl.ARRAY_BUFFER, subchunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, subchunk.mesh.numVertices * 6);
-					gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, subchunk.mesh.indices, gl.DYNAMIC_DRAW, 0, subchunk.mesh.numIndices);
-				}
+				// if(subchunk.mesh.meshChanged) {
+				// 	subchunk.mesh.meshChanged = false;
+				// 	gl.bindBuffer(gl.ARRAY_BUFFER, subchunk.mesh.VBO);
+				// 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, subchunk.mesh.EBO);
+
+				// 	gl.bufferData(gl.ARRAY_BUFFER, subchunk.mesh.vertices, gl.DYNAMIC_DRAW, 0, subchunk.mesh.numVertices * 6);
+				// 	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, subchunk.mesh.indices, gl.DYNAMIC_DRAW, 0, subchunk.mesh.numIndices);
+				// }
 
 				gl.drawElements(gl.TRIANGLES, subchunk.mesh.numIndices, gl.UNSIGNED_INT, 0);
 			}
